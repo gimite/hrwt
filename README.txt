@@ -7,6 +7,8 @@ which enables you to write whole Web application (both client and server) in Rub
 
 But currently this is EXPERIMENTAL and not useful for practical use.
 
+Demo: http://gimite.net/rwt_demo/console
+
 
 * How to use
 
