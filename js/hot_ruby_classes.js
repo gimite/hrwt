@@ -179,6 +179,14 @@ Ruby.defineClass("Module", {
       }
     },
     
+    "ancestors": function(receiver) {
+      var ary = [];
+      Ruby.eachAncestor(receiver, function(c) {
+        ary.push(c);
+      });
+      return Ruby.toRubyArray(ary);
+    },
+    
     "inspect": function(receiver) {
       return receiver.name;
     }

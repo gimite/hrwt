@@ -18,7 +18,7 @@ var Ruby = {
       }
     }
     //console.log(receiver, name, args, block, callback);
-    Ruby.vm.invokeMethod(receiver, name, args, block, 0, false, callback);
+    Ruby.vm.invokeMethod(receiver, name, args, block, 0, false, null, callback);
   },
   
   /**
@@ -53,6 +53,18 @@ var Ruby = {
       return obj.singletonClass;
     } else {
       Ruby.fatal("Cannot define singleton method for: " + obj.toString());
+    }
+  },
+  
+  eachAncestor: function(classObj, block) {
+    var res;
+    while (classObj) {
+      if (typeof(res = block(classObj)) != "undefined") return res;
+      var included = classObj.included;
+      for (var i = included.length - 1; i >= 0; --i) {
+        if (typeof(res = block(included[i])) != "undefined") return res;
+      }
+      classObj = classObj.superClass;
     }
   },
   

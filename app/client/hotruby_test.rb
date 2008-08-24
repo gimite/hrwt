@@ -74,7 +74,7 @@ res = hoge.im99(3)
 assert_equal(res[0], "im99", "method_missing 1")
 assert_equal(res[1], 3, "method_missing 2")
 
-# Modules
+# Inheritance and modules
 
 module Module1
   
@@ -95,15 +95,32 @@ class Class1
   include(Module1)
   
   def bar()
-    return "cbar"
+    return super() + " c1bar"
   end
   
 end
 
-obj = Class1.new()
+class Class2 < Class1
+  
+  def bar()
+    return super() + " c2bar"
+  end
+  
+end
+
+class Class3 < Class2
+  
+  def bar()
+    return super() + " c3bar"
+  end
+  
+end
+
+obj = Class3.new()
 assert_equal(obj.foo(), "mfoo", "module 1")
-assert_equal(obj.bar(), "cbar", "module 2")
-assert(obj.is_a?(Module1), "module 3")
+assert(obj.is_a?(Module1), "module 2")
+assert_equal(obj.bar(), "mbar c1bar c2bar c3bar", "super")
+assert(obj.is_a?(Class1), "is_a? superclass")
 
 # Method args
 

@@ -484,7 +484,8 @@ RubyVM.prototype = {
               var block = (cmd[4] & RubyVM.VM_CALL_ARGS_BLOCKARG_BIT) ? args.pop() : cmd[3];
               if(block instanceof Array)
                 block = Ruby.toRubyProc(block, sf);
-              me.invokeMethodAndPush(receiver, cmd[1], args, block, sf, cmd[4], false, bodyCallback);
+              me.invokeMethodAndPush(
+                receiver, cmd[1], args, block, sf, cmd[4], false, null, bodyCallback);
               return;
             case "invokesuper" :
               var args = sf.stack.slice(sf.sp - cmd[1], sf.sp);
@@ -494,13 +495,15 @@ RubyVM.prototype = {
               var block = (cmd[3] & RubyVM.VM_CALL_ARGS_BLOCKARG_BIT) ? args.pop() : cmd[2];
               if(block instanceof Array)
                 block = Ruby.toRubyProc(block, sf);
-              me.invokeMethodAndPush(sf.self, sf.methodName, args, block, sf, cmd[3], true, bodyCallback);
+              me.invokeMethodAndPush(
+                sf.self, sf.methodName, args, block, sf, cmd[3], true, sf.classObj, bodyCallback);
               return;
             case "invokeblock" :
               var args = sf.stack.slice(sf.sp - cmd[1], sf.sp);
               sf.sp -= cmd[1];
               if (!sf.block) Ruby.fatal("no block given");
-              me.invokeMethodAndPush(sf.block, "yield", args, null, sf, cmd[2], false, bodyCallback);
+              me.invokeMethodAndPush(
+                sf.block, "yield", args, null, sf, cmd[2], false, null, bodyCallback);
               return;
             case "definemethod" :
               var obj = sf.stack[--sf.sp];
@@ -619,8 +622,10 @@ RubyVM.prototype = {
     callback(null, ex);
   },
   
-  invokeMethodAndPush: function(receiver, methodName, args, block, sf, type, invokeSuper, callback) {
-    this.invokeMethod(receiver, methodName, args, block, type, invokeSuper, function(res, ex) {
+  invokeMethodAndPush: function(
+        receiver, methodName, args, block, sf, type, invokeSuper, classObj, callback) {
+    this.invokeMethod(
+          receiver, methodName, args, block, type, invokeSuper, classObj, function(res, ex) {
       if (ex) return callback(null, ex);
       sf.stack[sf.sp++] = res;
       //console.log("stack: ", sf, sf.stack.slice(0, sf.sp), sf.sp);
@@ -630,14 +635,17 @@ RubyVM.prototype = {
   
   /**
    * Invoke the method
-   * @param {Object} receiver
+   * @param {RubyModule} classObj
+   * @param {RubyObject} receiver
    * @param {String} methodName
    * @param {Array} args
+   * @param {RubyObject} block
    * @param {RubyVM.StackFrame} sf
    * @param {Number} type VM_CALL_ARGS_SPLAT_BIT, ...
    * @param {boolean} invokeSuper
+   * @param {function} callback
    */
-  invokeMethod : function(receiver, methodName, args, block, type, invokeSuper, callback) {
+  invokeMethod : function(receiver, methodName, args, block, type, invokeSuper, classObj, callback) {
     var me = this;
     var receiverClass = Ruby.getClass(receiver);
     var invokeClass = receiverClass;
@@ -667,56 +675,20 @@ RubyVM.prototype = {
     var singletonClass = receiver !== null ? receiver.singletonClass : null;
     var searchClass = singletonClass || receiverClass;
     
-    if (invokeSuper) {
-      while (func == null) {
-        // Search Parent class
-        if (!("superClass" in searchClass)) break;
-        searchClass = searchClass.superClass;
-        invokeClass = searchClass;
-
-        // Search method in class
-        func = searchClass.methods[methodName];
+    var skip = invokeSuper;
+    Ruby.eachAncestor(searchClass, function(c) {
+      if (!skip) {
+        invokeClass = c;
+        func = c.methods[methodName];
+        if (func) return func;
       }
-    } else {
-      //trace("receiverClassName = " + receiverClassName);
-      while (true) {
-        //trace("methodName = " + methodName);
-        
-        // Search method in class
-        func = searchClass.methods[methodName];
-        if (func != null) break;
-        
-        // Search included modules
-        var included = searchClass.included;
-        for (var i = included.length - 1; i >= 0; --i) {
-          invokeClass = included[i];
-          func = invokeClass.methods[methodName];
-          if (func != null) break;
-        }
-        if (func != null) break;
-
-        // Search Parent class
-        if ("superClass" in searchClass) {
-          searchClass = searchClass.superClass;
-          //trace("searchClass = " + searchClass);
-          if(searchClass == null) {
-            func = null;
-            break;
-          }
-          invokeClass = searchClass;
-          //trace("invokeClassName = " + invokeClassName);
-          continue;
-        }
-        break;
-      }
-    }
+      if (invokeSuper && c == classObj) skip = false;
+    });
     if (func == null) {
-      if (invokeSuper) {
-        callback(null);
-        return;
-      } else if (methodName != "method_missing") {
+      if (methodName != "method_missing") {
         var newArgs = [Ruby.intern(methodName)].concat(args);
-        me.invokeMethod(receiver, "method_missing", newArgs, block, type, invokeSuper, callback);
+        me.invokeMethod(
+          receiver, "method_missing", newArgs, block, type, false, null, callback);
         return;
       } else {
         Ruby.fatal("This must not happen");
