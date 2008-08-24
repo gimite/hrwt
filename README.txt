@@ -1,3 +1,13 @@
+* What's HRWT?
+
+HRWT (HotRuby Web Toolkit) is Ruby VM on JavaScript (modified HotRuby) + DRb-ish RPC.
+
+Hopefully this will be a framework which is Ruby version of GWT (Google Web Toolkit) in the future,
+which enables you to write whole Web application (both client and server) in Ruby, without JavaScript.
+
+But currently this is EXPERIMENTAL and not useful for practical use.
+
+
 * How to use
 
 To start server, run:
