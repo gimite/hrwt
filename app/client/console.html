@@ -1,0 +1,60 @@
+<html>
+<head>
+	<title>HotRuby Console</title>
+	<script type="text/javascript" src="js/prototype-1.6.0.2.js"></script>
+	<script type="text/javascript" src="js/hot_ruby_core.js"></script>
+	<script type="text/javascript" src="js/hot_ruby_util.js"></script>
+	<script type="text/javascript" src="js/hot_ruby_classes.js"></script>
+	
+	<script type="text/javascript">
+	  
+		function run(debug) {
+			var src = document.getElementById("srcArea").value;
+			Ruby.vm.debug = debug;
+			Ruby.vm.compileAndRun("compile", {src: src});
+		}
+		
+		function runFile(file, debug) {
+			Ruby.vm.debug = debug;
+		  Ruby.vm.compileAndRun("iseq/" + file, {});
+		}
+		
+		function init() {
+		  Ruby.vm.debugDom = document.getElementById("debug");
+		}
+		
+	</script>
+</head><body onload="init();">
+  
+  <h1>HotRuby Console</h1>
+  
+  <p>
+    <a href="http://gimite.net/archive/rwt-0.0.1.tar.gz">Source</a> /
+    <a href="http://d.hatena.ne.jp/Gimite/20080721/1216637506">Article (Japanese)</a> /
+    <a href="chat">Chat (Demo)</a>
+  </p>
+  
+	<div>Source:<br />
+		<textarea id="srcArea" rows="7" style="width:100%">Thread.new() do
+  for i in 0...3
+    puts("sub " + i.to_s())
+    sleep 1
+  end
+end
+
+sleep(0.5)
+for i in 0...3
+  puts("main " + i.to_s())
+  sleep 1
+end
+</textarea><br />
+
+		<input type="button" onclick="javascript:run(false)" value="Run"></input>
+		<input type="button" onclick="javascript:run(true)" value="Run (dbg)"></input>
+		<input type="button" onclick="javascript:runFile('hotruby_test', false)" value="Run tests"></input>
+		<input type="button" onclick="javascript:runFile('hotruby_test', true)" value="Run tests (dbg)"></input>
+	</div>
+	<div>Result:</div>
+	<div id="debug" class="result"></div>
+
+</body></html>

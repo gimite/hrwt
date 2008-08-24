@@ -1,0 +1,8 @@
+Test is at app/client/hotruby_test.rb
+
+To run the test, run:
+$ ruby hrwt_server.rb --port 12007
+
+and go to:
+http://localhost:12007/console
+and click [test].
