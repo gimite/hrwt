@@ -198,6 +198,18 @@ for a, b in [[1, 2], [3, 4]]
 end
 assert_equal(ary, [[1, 2], [3, 4]], "for 2")
 
+for i in 0...10
+  break if i==5
+end
+assert_equal(i, 5, "for 3")
+
+ary = []
+for i in 0...5
+  next if i==3
+  ary.push(i)
+end
+assert_equal(ary, [0, 1, 2, 4], "for 4")
+
 # case
 
 case 2
@@ -238,4 +250,38 @@ rescue
   a = 2
 end
 assert_equal(a, 2, "exception 2.2")
+
+# break/return
+
+def br_hoge
+  yield
+  assert(false, "break 3")
+end
+
+def br_foo
+  br_hoge() do
+    yield
+    assert(false, "break 4")
+  end
+  assert(false, "break 5")
+end
+
+a = 0
+b = br_foo() do
+  a = 1
+  break "foo"
+  a = 2
+end
+
+assert_equal(a, 1, "break 1")
+assert_equal(b, "foo", "break 2")
+
+def br_bar()
+  br_foo() do
+    return "bar"
+  end
+  assert(false, "return 2")
+end
+
+assert_equal(br_bar(), "bar", "return 1")
 

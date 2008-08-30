@@ -655,6 +655,16 @@ Ruby.defineClass("StandardError", {
   }
 });
 
+Ruby.defineClass("BreakException", {
+  "instanceMethods": {
+  }
+});
+
+Ruby.defineClass("ReturnException", {
+  "instanceMethods": {
+  }
+});
+
 Ruby.defineClass("CGI", {
   "classMethods": {
     

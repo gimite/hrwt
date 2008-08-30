@@ -378,18 +378,10 @@ RubyVM.prototype = {
               sf.stack[sf.sp++] = value;
               break;
             case "setlocal" :
-              var localSF = sf;
-              while (localSF.isProc) {
-                localSF = localSF.parentStackFrame;
-              }
-              localSF.localVars[cmd[1]] = sf.stack[--sf.sp];
+              me.getLocalStackFrame(sf).localVars[cmd[1]] = sf.stack[--sf.sp];
               break;
             case "getlocal" :
-              var localSF = sf;
-              while (localSF.isProc) {
-                localSF = localSF.parentStackFrame;
-              }
-              sf.stack[sf.sp++] = localSF.localVars[cmd[1]];
+              sf.stack[sf.sp++] = me.getLocalStackFrame(sf).localVars[cmd[1]];
               break;
             case "setglobal" :
               me.globalVars[cmd[1]] = sf.stack[--sf.sp];
@@ -501,9 +493,10 @@ RubyVM.prototype = {
             case "invokeblock" :
               var args = sf.stack.slice(sf.sp - cmd[1], sf.sp);
               sf.sp -= cmd[1];
-              if (!sf.block) Ruby.fatal("no block given");
+              var localSF = me.getLocalStackFrame(sf);
+              if (!localSF.block) Ruby.fatal("no block given");
               me.invokeMethodAndPush(
-                sf.block, "yield", args, null, sf, cmd[2], false, null, bodyCallback);
+                localSF.block, "yield", args, null, sf, cmd[2], false, null, bodyCallback);
               return;
             case "definemethod" :
               var obj = sf.stack[--sf.sp];
@@ -554,9 +547,27 @@ RubyVM.prototype = {
               me.endBlocks.push(cmd[1]);
               break;
             case "throw" :
-              // TODO: Should support break/return. They have different throwState.
-              var throwState = cmd[1];
-              var throwObj = sf.stack[--sf.sp];
+              var val = sf.stack[--sf.sp];
+              var throwObj;
+              switch (cmd[1]) {
+                case 0:
+                  throwObj = val;
+                  break;
+                case 1:
+                  throwObj = new RubyObject(Ruby.ReturnException);
+                  throwObj.value = val;
+                  throwObj.targetStackFrame = me.getLocalStackFrame(sf);
+                  break;
+                case 2:
+                  if (!sf.isProc) Ruby.fatal("unexpected break");
+                  throwObj = new RubyObject(Ruby.BreakException);
+                  throwObj.value = val;
+                  throwObj.targetStackFrame = sf.parentStackFrame;
+                  break;
+                default:
+                  Ruby.fatal("Unknown throw state: " + cmd[1]);
+                  break;
+              }
               bodyCallback(null, throwObj);
               return;
             case "nop" :
@@ -619,14 +630,25 @@ RubyVM.prototype = {
       })();
     }
     if (deferred) return;
-    callback(null, ex);
+    if (Ruby.getClass(ex) == Ruby.ReturnException && ex.targetStackFrame == sf) {
+      sf.stack[sf.sp++] = ex.value;
+      callback();
+    } else {
+      callback(null, ex);
+    }
   },
   
   invokeMethodAndPush: function(
         receiver, methodName, args, block, sf, type, invokeSuper, classObj, callback) {
     this.invokeMethod(
           receiver, methodName, args, block, type, invokeSuper, classObj, function(res, ex) {
-      if (ex) return callback(null, ex);
+      if (ex) {
+        if (Ruby.getClass(ex) == Ruby.BreakException && ex.targetStackFrame == sf) {
+          res = ex.value;
+        } else {
+          return callback(null, ex);
+        }
+      }
       sf.stack[sf.sp++] = res;
       //console.log("stack: ", sf, sf.stack.slice(0, sf.sp), sf.sp);
       callback(res);
@@ -926,6 +948,13 @@ RubyVM.prototype = {
     if (!classObj)
       Ruby.fatal("[getConstant] Cannot find constant : " + constName);
     return classObj.constants[constName];
+  },
+  
+  getLocalStackFrame: function(sf) {
+    while (sf.isProc) {
+      sf = sf.parentStackFrame;
+    }
+    return sf;
   },
   
   includeModule: function(klass, module) {
