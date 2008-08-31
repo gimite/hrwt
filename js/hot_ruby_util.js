@@ -289,7 +289,7 @@ var Ruby = {
       case "flash":
         RubyVM.debugTextField.text += str + "\n";
         break;
-      case "rhino":
+      case "console":
         print(str);
         break;
       default:

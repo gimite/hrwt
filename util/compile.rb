@@ -1,5 +1,6 @@
 require "pp"
 require "json"
+require "optparse"
 
 =begin
 OutputCompileOption = {
@@ -20,9 +21,13 @@ OutputCompileOption = {
   :stack_caching            =>false,
 }
 
-inst= VM::InstructionSequence.compile(IO.read(ARGV[0]), "src", 1, OutputCompileOption)
-if ARGV[1]=="a"
-  pp inst.to_a
+@opts = OptionParser.getopts("aj")
+
+inst = VM::InstructionSequence.compile(IO.read(ARGV[0]), "src", 1, OutputCompileOption)
+if @opts["a"]
+  pp inst.to_a()
+elsif @opts["j"]
+  puts inst.to_a().to_json()
 else
   puts inst.disasm
 end

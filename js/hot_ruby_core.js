@@ -1,7 +1,17 @@
 // The license of this source is "Ruby License"
 
-if (!window.console) {
-  window.console = {log: function(){ }, error: function(){ }};
+if (!this.console) {
+  if (typeof(window) != "undefined") {
+    this.console = {
+      log: function(){ },
+      error: function(){ }
+    };
+  } else {
+    this.console = {
+      log: print,
+      error: print
+    };
+  }
 }
 
 var RubyObject = function(classObj) {
@@ -788,7 +798,7 @@ RubyVM.prototype = {
       return receiver.instanceVars[varName];
     }
     
-    if(this.env == "browser" || this.env == "rhino") {
+    if(this.env == "browser" || this.env == "console") {
       // Get native global variable
       var v = eval("(" + varName + ")");
       if(typeof(v) != "undefined") {
@@ -1036,10 +1046,10 @@ RubyVM.prototype = {
   },
   
   /**
-   * Check whether the environment is Flash, Browser or Rhino.
+   * Check whether the environment is Flash, Browser or Console (SpiderMonkey or Rhino).
    */
   checkEnv : function() {
-    if(typeof(_root) != "undefined") {
+    if (typeof(_root) != "undefined") {
       this.env = "flash";
       // Create debug text field
       RubyVM.debugTextField = new TextField();
@@ -1055,14 +1065,16 @@ RubyVM.prototype = {
       var obj = new RubyObject(Ruby.NativeObject);
       obj.native = _root;
       this.globalVars.$native.instanceVars._root = obj;
-    } else if(typeof(alert) == "undefined") {
-      this.env = "rhino";
+    } else if (typeof(window) != "undefined") {
+      this.env = "browser";
+    } else if (typeof(print) != "undefined") {
+      this.env = "console";
       // Define alert
       alert = function(str) {
         print(str);
       }
     } else {
-      this.env = "browser";
+      Ruby.fatal("Unknown environment");
     }
   },
   

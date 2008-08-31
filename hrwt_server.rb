@@ -8,23 +8,12 @@ end
 $LOAD_PATH << "./lib"
 require "optparse"
 require "webrick"
+require "hrwt"
 
-
-OutputCompileOption = {
-  :peephole_optimization    =>true,
-  :inline_const_cache       =>false,
-  :specialized_instruction  =>false,
-  :operands_unification     =>false,
-  :instructions_unification =>false,
-  :stack_caching            =>false,
-}
-
-REQUIRED_PATHS = ["lib/hrwt/builtin.rb", "lib/hrwt/rpc_base.rb", "lib/hrwt/rpc_client.rb"]
 
 def compile(src, req, res)
   res["Content-Type"] = "text/javascript"
-  src = REQUIRED_PATHS.map(){ |s| File.read(s) }.join("") + src
-  res.body = VM::InstructionSequence.compile(src, "src", 1, OutputCompileOption).to_a().to_json()
+  res.body = HRWT.compile(src)
 end
 
 def base_prefix(path)

@@ -285,3 +285,5 @@ end
 
 assert_equal(br_bar(), "bar", "return 1")
 
+
+puts("Passed all tests.")
