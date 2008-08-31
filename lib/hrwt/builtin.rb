@@ -3,6 +3,8 @@ JS.debug = false
 
 class Array
     
+    alias_method :<<, :push
+    
     def each(&block)
       i = 0
       size = self.size

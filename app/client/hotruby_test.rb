@@ -7,6 +7,8 @@ assert_equal("hoge".class, String, "string literal 2")
 assert_equal(true.class, TrueClass, "true literal")
 assert_equal(false.class, FalseClass, "false literal")
 assert_equal(nil.class, NilClass, "nil literal")
+foo = "FOO"
+assert_equal("hoge#{foo}bar", "hogeFOObar", "embedded expression")
 
 # Constants and classes
 

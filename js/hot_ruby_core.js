@@ -324,7 +324,7 @@ RubyVM.prototype = {
               break;
             case "putobject" :
               var value = cmd[1];
-              if(typeof(value) == "string") {
+              if (typeof(value) == "string") {
                 if (value.match(/^(\d+)\.\.(\d+)$/)) {
                   value = Ruby.toRubyRange(
                     parseInt(RegExp.$2), 
@@ -336,7 +336,15 @@ RubyVM.prototype = {
                     parseInt(RegExp.$1), 
                     true);
                 } else {
-                  value = me.getConstant(sf, null, value);
+                  value = Ruby.toRubyString(value);
+                }
+              } else if (typeof(value) == "object") {
+                if (value.type == "symbol") {
+                  value = Ruby.intern(value.value);
+                } else if (value.type == "constant") {
+                  value = me.getConstant(sf, null, value.name);
+                } else {
+                  Ruby.fatal("Unknown type for putobject: " + value.type);
                 }
               }
               sf.stack[sf.sp++] = value;
@@ -344,9 +352,23 @@ RubyVM.prototype = {
             case "putstring" :
               sf.stack[sf.sp++] = Ruby.toRubyString(cmd[1]);
               break;
+            case "tostring" :
+              if (Ruby.getClass(sf.stack[sf.sp - 1]) != Ruby.String) {
+                Ruby.sendAsync(sf.stack[sf.sp - 1], "to_s", [], null, function(res, ex) {
+                  if (ex) return bodyCallback(null, ex);
+                  sf.stack[sf.sp - 1] = res;
+                  bodyCallback();
+                });
+                return;
+              }
+              break;
             case "concatstrings" :
-              sf.stack[sf.sp++] = Ruby.toRubyString(
-                sf.stack.slice(sf.stack.length - cmd[1], sf.stack.length).join());
+              var str = "";
+              for (var i = sf.sp - cmd[1]; i < sf.sp; ++i) {
+                str += sf.stack[i].native;
+              }
+              sf.sp -= cmd[1];
+              sf.stack[sf.sp++] = Ruby.toRubyString(str);
               break;
             case "newarray" :
               var value = Ruby.toRubyArray(sf.stack.slice(sf.sp - cmd[1], sf.sp));

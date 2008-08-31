@@ -12,13 +12,38 @@ module HRWT
       :stack_caching            =>false,
     }
 
-    REQUIRED_PATHS = ["lib/hrwt/builtin.rb", "lib/hrwt/rpc_base.rb", "lib/hrwt/rpc_client.rb"]
+    REQUIRED_PATHS = [
+      "lib/hrwt/builtin.rb",
+      "lib/hrwt/rpc_base.rb",
+      "lib/hrwt/rpc_client.rb",
+      "lib/core/tuple.rb",
+    ]
     
   module_function
 
-    def compile(src)
-      src = REQUIRED_PATHS.map(){ |s| File.read(s) }.join("") + src
-      return VM::InstructionSequence.compile(src, "src", 1, OutputCompileOption).to_a().to_json()
+    def compile(src, require_defaults = true)
+      if require_defaults
+        src = REQUIRED_PATHS.map(){ |s| File.read(s) }.join("") + src
+      end
+      inst = VM::InstructionSequence.compile(src, "src", 1, OutputCompileOption).to_a()
+      inst = convert_objects(inst) # TODO: write seriously
+      return inst.to_json()
+    end
+    
+    def convert_objects(obj)
+      if obj.is_a?(Array)
+        if obj[0] == :putobject
+          case obj[1]
+            when Symbol
+              obj[1] = {"type" => "symbol", "value" => obj[1].to_s()}
+            when Module
+              obj[1] = {"type" => "constant", "name" => obj[1].name}
+          end
+        else
+          obj.each(){ |e| convert_objects(e) }
+        end
+      end
+      return obj
     end
     
     def run_on_console(src, debug = false)

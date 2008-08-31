@@ -1,6 +1,8 @@
+$LOAD_PATH << "./lib"
 require "pp"
 require "json"
 require "optparse"
+require "hrwt"
 
 =begin
 OutputCompileOption = {
@@ -21,13 +23,16 @@ OutputCompileOption = {
   :stack_caching            =>false,
 }
 
+def compile(path)
+  return VM::InstructionSequence.compile(IO.read(path), "src", 1, OutputCompileOption)
+end
+
 @opts = OptionParser.getopts("aj")
 
-inst = VM::InstructionSequence.compile(IO.read(ARGV[0]), "src", 1, OutputCompileOption)
 if @opts["a"]
-  pp inst.to_a()
+  pp compile(ARGV[0]).to_a()
 elsif @opts["j"]
-  puts inst.to_a().to_json()
+  puts HRWT.compile(IO.read(ARGV[0]), false)
 else
-  puts inst.disasm
+  puts compile(ARGV[0]).disasm
 end

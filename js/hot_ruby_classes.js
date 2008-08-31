@@ -45,6 +45,14 @@ Ruby.Object = Ruby.defineClass("Object", {
       Ruby.sendAsync(receiver, "==", args, block, callback);
     }),
     
+    "object_id": function(receiver) {
+      return 0; // TODO: implement it
+    },
+    
+    "__send__": asyncFunc(function(receiver, args, block, callback) {
+      Ruby.sendAsync(receiver, args[0].native, args.slice(1), block, callback);
+    }),
+    
     "to_s" : function(receiver) {
       if(typeof(receiver) == "number")
         return receiver.toString();
@@ -177,6 +185,10 @@ Ruby.defineClass("Module", {
           Ruby.makeModuleFunction(receiver, args[i].native);
         }
       }
+    },
+    
+    "alias_method": function(receiver, args) {
+      receiver.methods[args[0].native] = receiver.methods[args[1].native];
     },
     
     "ancestors": function(receiver) {
@@ -489,6 +501,10 @@ Ruby.defineClass("String", {
       return receiver.native.length == 0;
     },
     
+    "dup": function(receiver) {
+      return Ruby.toRubyString(receiver.native);
+    },
+    
     "to_s": function(receiver) {
       return receiver;
     },
@@ -529,6 +545,49 @@ Ruby.defineClass("Array", {
     "to_s" : function(receiver, args) {
       return receiver.native.join(args[0]);
     }
+  }
+});
+
+Ruby.defineModule("Enumerable", {});
+
+Ruby.defineClass("Tuple", {
+  "instanceMethods": {
+    
+    "initialize" : function(receiver, args) {
+      receiver.native = new Array(args[0]);
+      for (var i = 0; i < args[0]; ++i) {
+        receiver.native[i] = null;
+      }
+    },
+    
+    "dup": function(receiver) {
+      var res = new RubyObject(Ruby.Tuple);
+      res.native = receiver.native.concat([]);
+      return res;
+    },
+    
+    "fields" : function(receiver) {
+      return receiver.native.length;
+    },
+    
+    "at" : function(receiver, args) {
+      return receiver.native[args[0]];
+    },
+    
+    "put" : function(receiver, args) {
+      receiver.native[args[0]] = args[1];
+    },
+    
+    "copy_from": function(receiver, args) {
+      var other = args[0];
+      var op = args[1];
+      var sp = args[2];
+      for (; op < other.native.length; ++op) {
+        receiver.native[sp] = other.native[op];
+        ++sp;
+      }
+    }
+    
   }
 });
 
