@@ -1,18 +1,19 @@
 <html>
 <head>
-	<title>HotRuby+RPC Chat</title>
-	<script type="text/javascript" src="js/prototype-1.6.0.2.js"></script>
-	<script type="text/javascript" src="js/hot_ruby_core.js"></script>
-	<script type="text/javascript" src="js/hot_ruby_util.js"></script>
-	<script type="text/javascript" src="js/hot_ruby_classes.js"></script>
-	
-	<script type="text/javascript">
-	  
-		function init() {
-		  Ruby.vm.compileAndRun("iseq/chat_client", {});
-		}
-		
-	</script>
+  <title>HotRuby+RPC Chat</title>
+  <script type="text/javascript" src="js/prototype-1.6.0.2.js"></script>
+  <script type="text/javascript" src="js/hot_ruby_core.js"></script>
+  <script type="text/javascript" src="js/hot_ruby_util.js"></script>
+  <script type="text/javascript" src="js/hot_ruby_classes.js"></script>
+  
+  <script type="text/javascript">
+    
+    function init() {
+      // Ruby.vm.debug = true;
+      Ruby.vm.compileAndRun("iseq/chat_client", {});
+    }
+    
+  </script>
 </head><body onload="init();">
   
   <h1>HotRuby+RPC Chat</h1>

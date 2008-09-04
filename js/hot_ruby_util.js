@@ -113,7 +113,7 @@ var Ruby = {
       func.proc = v;
       return func;
     }
-    return v.native;
+    return v.value;
   },
   
   /**
@@ -153,7 +153,7 @@ var Ruby = {
       return Ruby.toRubyArray(ary);
     }
     var obj = new RubyObject(Ruby.NativeObject);
-    obj.native = v;
+    obj.value = v;
     return obj;
   },
   
@@ -176,7 +176,7 @@ var Ruby = {
    */
   toRubyString : function(str) {
     var obj = new RubyObject(Ruby.String);
-    obj.native = str;
+    obj.value = str;
     return obj;
   },
   
@@ -200,7 +200,7 @@ var Ruby = {
    */
   toRubyArray : function(ary) {
     var obj = new RubyObject(Ruby.Array);
-    obj.native = ary;
+    obj.value = ary;
     return obj;
   },
   
@@ -214,10 +214,10 @@ var Ruby = {
     hash.instanceVars = {
       length : ary.length / 2
     };
-    hash.native = {};
+    hash.value = {};
     for (var i = 0;i < ary.length; i += 2) {
       if(ary[i] !== null && ary[i].rubyClass == Ruby.String) {
-        hash.native[ary[i].native] = ary[i + 1];
+        hash.value[ary[i].value] = ary[i + 1];
       } else {
         Ruby.fatal("[toRubyHash] Unsupported. Cannot put this object to Hash");
       }

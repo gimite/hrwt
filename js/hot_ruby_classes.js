@@ -11,7 +11,7 @@ Ruby.Object = Ruby.defineClass("Object", {
     },
     
     "method_missing": function(receiver, args) {
-      Ruby.fatal("Undefined method `" + args[0].native + "' for " + Ruby.getClass(receiver).name);
+      Ruby.fatal("Undefined method `" + args[0].value + "' for " + Ruby.getClass(receiver).name);
     },
     
     "==" : function(receiver, args) {
@@ -50,14 +50,14 @@ Ruby.Object = Ruby.defineClass("Object", {
     },
     
     "__send__": asyncFunc(function(receiver, args, block, callback) {
-      Ruby.sendAsync(receiver, args[0].native, args.slice(1), block, callback);
+      Ruby.sendAsync(receiver, args[0].value, args.slice(1), block, callback);
     }),
     
     "to_s" : function(receiver) {
       if(typeof(receiver) == "number")
         return receiver.toString();
       else
-        return receiver.native.toString();
+        return receiver.value.toString();
     },
     
     "inspect": function(receiver) {
@@ -82,12 +82,12 @@ Ruby.Object = Ruby.defineClass("Object", {
           continue;
         }
         if(obj.rubyClass == Ruby.String) {
-          Ruby.printDebug(obj.native);
+          Ruby.printDebug(obj.value);
           continue;
         }
         if(obj.rubyClass == Ruby.Array) {
-          for(var j=0; j<obj.native.length; j++) {
-            Ruby.printDebug(obj.native[j]);
+          for(var j=0; j<obj.value.length; j++) {
+            Ruby.printDebug(obj.value[j]);
           }
           continue;
         }
@@ -99,7 +99,7 @@ Ruby.Object = Ruby.defineClass("Object", {
     "p" : asyncFunc(function(receiver, args, block, callback) {
       if (args.length == 1) {
         Ruby.sendAsync(args[0], "inspect", function(res, ex) {
-          Ruby.printDebug(res.native);
+          Ruby.printDebug(res.value);
           callback();
         });
       } else {
@@ -126,19 +126,19 @@ Ruby.Object = Ruby.defineClass("Object", {
     // JS only functions
     
     "assert": function(receiver, args) {
-      console.log(args[1].native);
+      console.log(args[1].value);
       if (!Ruby.toBoolean(args[0])) {
-        console.error("Assertion failed: " + args[1].native);
+        console.error("Assertion failed: " + args[1].value);
         a.hoge; // shows stack trace in FireBug
       }
     },
     
     "assert_equal": asyncFunc(function(receiver, args, block, callback) {
-      console.log(args[2].native);
+      console.log(args[2].value);
       Ruby.sendAsync(args[0], "==", [args[1]], function(res, ex) {
         if (ex) return callback(null, ex);
         if (!res) {
-          console.error("Assertion failed: " + args[2].native, ": ", args[0], " vs ", args[1]);
+          console.error("Assertion failed: " + args[2].value, ": ", args[0], " vs ", args[1]);
           a.hoge; // shows stack trace in FireBug
         }
         callback();
@@ -182,13 +182,13 @@ Ruby.defineClass("Module", {
         receiver.scope = "module_function";
       } else {
         for (var i = 0; i < args.length; ++i) {
-          Ruby.makeModuleFunction(receiver, args[i].native);
+          Ruby.makeModuleFunction(receiver, args[i].value);
         }
       }
     },
     
     "alias_method": function(receiver, args) {
-      receiver.methods[args[0].native] = receiver.methods[args[1].native];
+      receiver.methods[args[0].value] = receiver.methods[args[1].value];
     },
     
     "ancestors": function(receiver) {
@@ -450,59 +450,59 @@ Ruby.defineClass("String", {
   "instanceMethods": {
     "+" : function(receiver, args) {
       if(typeof(args[0]) == "object")
-        return receiver.native + args[0].native;
+        return receiver.value + args[0].value;
       else
-        return receiver.native + args[0];
+        return receiver.value + args[0];
     },
     
     "<<": function(receiver, args) {
-      receiver.native += args[0].native;
+      receiver.value += args[0].value;
     },
     
     "*" : function(receiver, args) {
       var ary = new Array(args[0]);
       for(var i=0; i<args[0]; i++) {
-        ary[i] = receiver.native;
+        ary[i] = receiver.value;
       }
       return ary.join("");
     },
     
     "==" : function(receiver, args) {
-      return receiver.native == args[0].native;
+      return receiver.value == args[0].value;
     },
     
     "[]" : function(receiver, args) {
       if(args.length == 1 && typeof(args[0]) == "number") {
         var no = args[0];
         if(no < 0) 
-          no = receiver.native.length + no;
-        if(no < 0 || no >= receiver.native.length)
+          no = receiver.value.length + no;
+        if(no < 0 || no >= receiver.value.length)
           return null;
-        return receiver.native.charCodeAt(no);
+        return receiver.value.charCodeAt(no);
       } else if(args.length == 2 && typeof(args[0]) == "number" && typeof(args[1]) == "number") {
         var start = args[0];
         if(start < 0) 
-          start = receiver.native.length + start;
-        if(start < 0 || start >= receiver.native.length)
+          start = receiver.value.length + start;
+        if(start < 0 || start >= receiver.value.length)
           return null;
-        if(args[1] < 0 || start + args[1] > receiver.native.length)
+        if(args[1] < 0 || start + args[1] > receiver.value.length)
           return null;
-        return receiver.native.substr(start, args[1]);
+        return receiver.value.substr(start, args[1]);
       } else {
         Ruby.fatal("Unsupported String[]");
       }
     },
     
     "length": function(receiver) {
-      return receiver.native.length;
+      return receiver.value.length;
     },
     
     "empty?": function(receiver) {
-      return receiver.native.length == 0;
+      return receiver.value.length == 0;
     },
     
     "dup": function(receiver) {
-      return Ruby.toRubyString(receiver.native);
+      return Ruby.toRubyString(receiver.value);
     },
     
     "to_s": function(receiver) {
@@ -510,7 +510,7 @@ Ruby.defineClass("String", {
     },
 
     "inspect" : function(receiver) {
-      return '"' + receiver.native + '"';
+      return '"' + receiver.value + '"';
     }
   }
 });
@@ -518,32 +518,32 @@ Ruby.defineClass("String", {
 Ruby.defineClass("Array", {
   "instanceMethods": {
     "length" : function(receiver) {
-      return receiver.native.length;
+      return receiver.value.length;
     },
     
     "size" : function(receiver) {
-      return receiver.native.length;
+      return receiver.value.length;
     },
     
     "[]" : function(receiver, args) {
-      return receiver.native[args[0]];
+      return receiver.value[args[0]];
     },
     
     "[]=" : function(receiver, args) {
-      receiver.native[args[0]] = args[1];
+      receiver.value[args[0]] = args[1];
     },
     
     "push": function(receiver, args) {
-      receiver.native.push.apply(receiver.native, args);
+      receiver.value.push.apply(receiver.value, args);
       return receiver;
     },
     
     "join" : function(receiver, args) {
-      return receiver.native.join(args[0]);
+      return receiver.value.join(args[0]);
     },
     
     "to_s" : function(receiver, args) {
-      return receiver.native.join(args[0]);
+      return receiver.value.join(args[0]);
     }
   }
 });
@@ -554,36 +554,36 @@ Ruby.defineClass("Tuple", {
   "instanceMethods": {
     
     "initialize" : function(receiver, args) {
-      receiver.native = new Array(args[0]);
+      receiver.value = new Array(args[0]);
       for (var i = 0; i < args[0]; ++i) {
-        receiver.native[i] = null;
+        receiver.value[i] = null;
       }
     },
     
     "dup": function(receiver) {
       var res = new RubyObject(Ruby.Tuple);
-      res.native = receiver.native.concat([]);
+      res.value = receiver.value.concat([]);
       return res;
     },
     
     "fields" : function(receiver) {
-      return receiver.native.length;
+      return receiver.value.length;
     },
     
     "at" : function(receiver, args) {
-      return receiver.native[args[0]];
+      return receiver.value[args[0]];
     },
     
     "put" : function(receiver, args) {
-      receiver.native[args[0]] = args[1];
+      receiver.value[args[0]] = args[1];
     },
     
     "copy_from": function(receiver, args) {
       var other = args[0];
       var op = args[1];
       var sp = args[2];
-      for (; op < other.native.length; ++op) {
-        receiver.native[sp] = other.native[op];
+      for (; op < other.value.length; ++op) {
+        receiver.value[sp] = other.value[op];
         ++sp;
       }
     }
@@ -595,14 +595,14 @@ Ruby.defineClass("Hash", {
   "instanceMethods": {
     
     "[]" : function(receiver, args) {
-      return receiver.native[args[0].native];
+      return receiver.value[args[0].value];
     },
     
     "[]=" : function(receiver, args) {
-      if(!(args[0].native in receiver.native)) {
+      if(!(args[0].value in receiver.value)) {
         receiver.instanceVars.length++;
       }
-      return (receiver.native[args[0].native] = args[1]);
+      return (receiver.value[args[0].value] = args[1]);
     },
     
     "length" : function(receiver) {
@@ -615,7 +615,7 @@ Ruby.defineClass("Hash", {
     
     "keys": function(receiver) {
       var keys = [];
-      for (var k in receiver.native) {
+      for (var k in receiver.value) {
         keys.push(Ruby.toRubyString(k));
       }
       return Ruby.toRubyArray(keys);
@@ -728,7 +728,7 @@ Ruby.defineClass("CGI", {
   "classMethods": {
     
     "escapeHTML": function(receiver, args) {
-      return args[0].native.
+      return args[0].value.
         replace(/&/, "&amp;").
         replace(/</, "&lt;").
         replace(/>/, "&gt;").
@@ -744,7 +744,7 @@ Ruby.defineClass("JSON", {
   "classMethods": {
     
     "parse": function(receiver, args) {
-      var obj = eval("(" + args[0].native + ")");
+      var obj = eval("(" + args[0].value + ")");
       function convert(obj) {
         if (obj === null || typeof(obj) == "boolean" || typeof(obj) == "number") {
           return obj;
@@ -776,17 +776,17 @@ Ruby.defineClass("JSON", {
         } else if (typeof(obj) == "string") {
           return '"' + obj.replace(/([\\"])/g, "\\$1") + '"';
         } else if (obj.rubyClass == Ruby.String) {
-          return convert(obj.native);
+          return convert(obj.value);
         } else if (obj.rubyClass == Ruby.Array) {
-          var ary = new Array(obj.native.length);
-          for (var i = 0; i < obj.native.length; ++i) {
-            ary[i] = convert(obj.native[i]);
+          var ary = new Array(obj.value.length);
+          for (var i = 0; i < obj.value.length; ++i) {
+            ary[i] = convert(obj.value[i]);
           }
           return "[" + ary.join(",") + "]";
         } else if (obj.rubyClass == Ruby.Hash) {
           var ary = [];
-          for (var k in obj.native) {
-            ary.push(convert(k) + ":" + convert(obj.native[k]));
+          for (var k in obj.value) {
+            ary.push(convert(k) + ":" + convert(obj.value[k]));
           }
           return "{" + ary.join(",") + "}";
         }
@@ -808,17 +808,17 @@ Ruby.defineClass("JS", {
       var data = args[2];
       if (Ruby.getClass(data) == Ruby.Hash) {
         var ary = [];
-        for (var k in data.native) {
-          ary.push(k + "=" + encodeURIComponent(data.native[k].native));
+        for (var k in data.value) {
+          ary.push(k + "=" + encodeURIComponent(data.value[k].value));
         }
         data = ary.join("&");
       } else {
-        data = data && data.native;
+        data = data && data.value;
       }
       new Ajax.Request(
-        url.native,
+        url.value,
         {
-          method: method.native,
+          method: method.value,
           parameters: data,
           onSuccess: function(response) {
             callback(response.responseText);

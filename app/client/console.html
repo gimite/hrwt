@@ -1,29 +1,29 @@
 <html>
 <head>
-	<title>HotRuby Console</title>
-	<script type="text/javascript" src="js/prototype-1.6.0.2.js"></script>
-	<script type="text/javascript" src="js/hot_ruby_core.js"></script>
-	<script type="text/javascript" src="js/hot_ruby_util.js"></script>
-	<script type="text/javascript" src="js/hot_ruby_classes.js"></script>
-	
-	<script type="text/javascript">
-	  
-		function run(debug) {
-			var src = document.getElementById("srcArea").value;
-			Ruby.vm.debug = debug;
-			Ruby.vm.compileAndRun("compile", {src: src});
-		}
-		
-		function runFile(file, debug) {
-			Ruby.vm.debug = debug;
-		  Ruby.vm.compileAndRun("iseq/" + file, {});
-		}
-		
-		function init() {
-		  Ruby.vm.debugDom = document.getElementById("debug");
-		}
-		
-	</script>
+  <title>HotRuby Console</title>
+  <script type="text/javascript" src="js/prototype-1.6.0.2.js"></script>
+  <script type="text/javascript" src="js/hot_ruby_core.js"></script>
+  <script type="text/javascript" src="js/hot_ruby_util.js"></script>
+  <script type="text/javascript" src="js/hot_ruby_classes.js"></script>
+  
+  <script type="text/javascript">
+    
+    function run(debug) {
+      var src = document.getElementById("srcArea").value;
+      Ruby.vm.debug = debug;
+      Ruby.vm.compileAndRun("compile", {src: src});
+    }
+    
+    function runFile(file, debug) {
+      Ruby.vm.debug = debug;
+      Ruby.vm.compileAndRun("iseq/" + file, {});
+    }
+    
+    function init() {
+      Ruby.vm.debugDom = document.getElementById("debug");
+    }
+    
+  </script>
 </head><body onload="init();">
   
   <h1>HotRuby Console</h1>
@@ -34,8 +34,8 @@
     <a href="chat">Chat (Demo)</a>
   </p>
   
-	<div>Source:<br />
-		<textarea id="srcArea" rows="7" style="width:100%">Thread.new() do
+  <div>Source:<br />
+    <textarea id="srcArea" rows="7" style="width:100%">Thread.new() do
   for i in 0...3
     puts("sub " + i.to_s())
     sleep 1
@@ -49,12 +49,12 @@ for i in 0...3
 end
 </textarea><br />
 
-		<input type="button" onclick="javascript:run(false)" value="Run"></input>
-		<input type="button" onclick="javascript:run(true)" value="Run (dbg)"></input>
-		<input type="button" onclick="javascript:runFile('hotruby_test', false)" value="Run tests"></input>
-		<input type="button" onclick="javascript:runFile('hotruby_test', true)" value="Run tests (dbg)"></input>
-	</div>
-	<div>Result:</div>
-	<div id="debug" class="result"></div>
+    <input type="button" onclick="javascript:run(false)" value="Run">
+    <input type="button" onclick="javascript:run(true)" value="Run (dbg)">
+    <input type="button" onclick="javascript:runFile('hotruby_test', false)" value="Run tests">
+    <input type="button" onclick="javascript:runFile('hotruby_test', true)" value="Run tests (dbg)">
+  </div>
+  <div>Result:</div>
+  <div id="debug" class="result"></div>
 
 </body></html>

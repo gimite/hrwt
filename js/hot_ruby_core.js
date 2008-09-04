@@ -302,7 +302,7 @@ RubyVM.prototype = {
               break;
             case "opt_case_dispatch":
               var v = sf.stack[--sf.sp];
-              if(typeof(v) != "number") v = v.native;
+              if(typeof(v) != "number") v = v.value;
               for(var i=0; i<cmd[1].length; i+=2) {
                 if(v === cmd[1][i]) {
                   ip = opcode.label2ip[cmd[1][i+1]];
@@ -365,14 +365,14 @@ RubyVM.prototype = {
             case "concatstrings" :
               var str = "";
               for (var i = sf.sp - cmd[1]; i < sf.sp; ++i) {
-                str += sf.stack[i].native;
+                str += sf.stack[i].value;
               }
               sf.sp -= cmd[1];
               sf.stack[sf.sp++] = Ruby.toRubyString(str);
               break;
             case "newarray" :
               var value = Ruby.toRubyArray(sf.stack.slice(sf.sp - cmd[1], sf.sp));
-              sf.sp -= value.native.length;
+              sf.sp -= value.value.length;
               sf.stack[sf.sp++] = value;
               break;
             case "duparray" :
@@ -382,7 +382,7 @@ RubyVM.prototype = {
               var ary = sf.stack[--sf.sp];
               if(typeof(ary) == "object" && ary.rubyClass == Ruby.Array) {
                 for(var i = cmd[1] - 1; i >= 0; i--) {
-                  sf.stack[sf.sp++] = ary.native[i];            
+                  sf.stack[sf.sp++] = ary.value[i];            
                 }
                 if(cmd[2] && 1) {
                   // TODO
@@ -751,7 +751,7 @@ RubyVM.prototype = {
     
     // Splat array args
     if (type & RubyVM.VM_CALL_ARGS_SPLAT_BIT) {
-      args = args.concat(args.pop().native);
+      args = args.concat(args.pop().value);
     }
     
     // Exec method
@@ -809,7 +809,7 @@ RubyVM.prototype = {
   getNativeEnvVar: function(receiver, varName, args) {
     //trace(varName);
     if(this.env == "flash" && varName == "import") {
-      var imp = args[0].native;
+      var imp = args[0].value;
       if(imp.charAt(imp.length - 1) != "*")
         Ruby.fatal("[getNativeEnvVar] Param must ends with * : " + imp);
       this.asPackages.push(imp.substr(0, imp.length - 1));
@@ -823,14 +823,14 @@ RubyVM.prototype = {
     if(this.env == "browser" || this.env == "console") {
       // Get native global variable
       var v = eval("(" + varName + ")");
-      if(typeof(v) != "undefined") {
-        if(typeof(v) == "function") {
+      if (typeof(v) != "undefined") {
+        if (args.length > 0) {
           var convArgs = Ruby.rubyObjectAryToNativeAry(args);
           var ret = v.apply(null, convArgs);
           return Ruby.nativeToRubyObject(ret);
         } else {
           var obj = new RubyObject(Ruby.NativeObject);
-          obj.native = v;
+          obj.value = v;
           return obj;
         }
       }
@@ -854,15 +854,15 @@ RubyVM.prototype = {
       }
       return {
         className : "NativeClass",
-        native : classObj
+        value : classObj
       }
     }
     
-    Ruby.fatal("[getNativeEnvVar] Cannot get the native variable: " + varName);
+    Ruby.fatal("[getNativeEnvVar] Cannot get the value variable: " + varName);
   },
   
   /**
-   * Invoke native method or get native instance variable
+   * Invoke value method or get value instance variable
    */
   invokeNativeMethod: function(receiver, methodName, args) {
     // Split methodName and operator
@@ -872,20 +872,20 @@ RubyVM.prototype = {
     }
     
     var ret;
-    if(receiver.native[methodName] instanceof Function) {
+    if (typeof(receiver.value[methodName]) == "function") {
       // Invoke native method
       if(op != null)
         Ruby.fatal("[invokeNativeMethod] Unsupported operator: " + op);
       var convArgs = Ruby.rubyObjectAryToNativeAry(args);
-      ret = receiver.native[methodName].apply(receiver.native, convArgs);
+      ret = receiver.value[methodName].apply(receiver.value, convArgs);
     } else {
       // Get native instance variable
       if(op == null) {
-        ret = receiver.native[methodName];
+        ret = receiver.value[methodName];
       } else {
         switch(op) {
           case "=": 
-            ret = receiver.native[methodName] = Ruby.rubyObjectToNative(args[0]);
+            ret = receiver.value[methodName] = Ruby.rubyObjectToNative(args[0]);
             break;
           default:
             Ruby.fatal("[invokeNativeMethod] Unsupported operator: " + op);
@@ -896,26 +896,26 @@ RubyVM.prototype = {
   },
   
   /**
-   * Invoke native "new", and create native instance.
+   * Invoke native "new", and create value instance.
    */
   invokeNativeNew: function(receiver, methodName, args) {
     var obj;
     var args = Ruby.rubyObjectAryToNativeAry(args);
     switch(args.length) {
-      case 0: obj = new receiver.native(); break; 
-      case 1: obj = new receiver.native(args[0]); break; 
-      case 2: obj = new receiver.native(args[0], args[1]); break; 
-      case 3: obj = new receiver.native(args[0], args[1], args[2]); break; 
-      case 4: obj = new receiver.native(args[0], args[1], args[2], args[3]); break; 
-      case 5: obj = new receiver.native(args[0], args[1], args[2], args[3], args[4]); break; 
-      case 6: obj = new receiver.native(args[0], args[1], args[2], args[3], args[4], args[5]); break;
-      case 7: obj = new receiver.native(args[0], args[1], args[2], args[3], args[4], args[5], args[6]); break;
-      case 8: obj = new receiver.native(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]); break;
-      case 9: obj = new receiver.native(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8]); break;
+      case 0: obj = new receiver.value(); break; 
+      case 1: obj = new receiver.value(args[0]); break; 
+      case 2: obj = new receiver.value(args[0], args[1]); break; 
+      case 3: obj = new receiver.value(args[0], args[1], args[2]); break; 
+      case 4: obj = new receiver.value(args[0], args[1], args[2], args[3]); break; 
+      case 5: obj = new receiver.value(args[0], args[1], args[2], args[3], args[4]); break; 
+      case 6: obj = new receiver.value(args[0], args[1], args[2], args[3], args[4], args[5]); break;
+      case 7: obj = new receiver.value(args[0], args[1], args[2], args[3], args[4], args[5], args[6]); break;
+      case 8: obj = new receiver.value(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]); break;
+      case 9: obj = new receiver.value(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8]); break;
       default: Ruby.fatal("[invokeNativeNew] Too much arguments: " + args.length);
     }
     var result = new RubyObject(Ruby.NativeObject);
-    result.native = obj;
+    result.value = obj;
     return result;
   },
   
@@ -1085,7 +1085,7 @@ RubyVM.prototype = {
       this.asPackages = [""];
       // Create _root NativeObject
       var obj = new RubyObject(Ruby.NativeObject);
-      obj.native = _root;
+      obj.value = _root;
       this.globalVars.$native.instanceVars._root = obj;
     } else if (typeof(window) != "undefined") {
       this.env = "browser";
