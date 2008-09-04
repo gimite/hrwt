@@ -1,3 +1,7 @@
+# Copyright (c) 2007, Evan Phoenix
+# Distributed under New BSD License
+# Copied from Rubinius http://rubini.us/
+
 # depends on: class.rb module.rb
 
 ##

@@ -34,4 +34,5 @@ Ruby Licence.
 
 js/hot_ruby_*.js: id:yukoba (http://hotruby.accelart.jp/)
 js/prototype-1.6.0.2.js: see the file
+lib/core/*: see the file
 Others: Hiroshi Ichikawa (Gimite) (http://gimite.net/)
