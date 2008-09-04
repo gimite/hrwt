@@ -367,18 +367,6 @@ Ruby.defineClass("Float", {
       return receiver == args[0];
     },
     
-    "times" : function(receiver, args, block) {
-      var i = 0;
-      Ruby.loopAsync(
-        function() { return i < receiver; },
-        function() { ++i; },
-        function(bodyCallback) {
-          Ruby.sendAsync(block, "yield", [i], bodyCallback);
-        },
-        callback
-      );
-    },
-    
     "to_s" : function(receiver) {
       return receiver.toString();
     },
@@ -440,6 +428,18 @@ Ruby.defineClass("Integer", {
       return receiver == args[0];
     },
 
+    "times" : asyncFunc(function(receiver, args, block, callback) {
+      var i = 0;
+      Ruby.loopAsync(
+        function() { return i < receiver; },
+        function() { ++i; },
+        function(bodyCallback) {
+          Ruby.sendAsync(block, "yield", [i], bodyCallback);
+        },
+        callback
+      );
+    }),
+    
     "inspect" : function(receiver) {
       return receiver.toString();
     }
