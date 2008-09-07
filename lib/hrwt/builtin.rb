@@ -1,6 +1,18 @@
 old_debug = JS.debug
 JS.debug = false
 
+
+class Class
+    
+    def new(*args, &block)
+      obj = allocate()
+      obj.__send__(:initialize, *args, &block)
+      return obj
+    end
+    
+end
+
+
 class Array
     
     alias_method :<<, :push
@@ -50,6 +62,7 @@ class Array
     
 end
 
+
 class Hash
     
     def each(&block)
@@ -71,5 +84,6 @@ class Hash
     end
     
 end
+
 
 JS.debug = old_debug

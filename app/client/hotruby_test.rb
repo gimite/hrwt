@@ -153,6 +153,9 @@ func3(){ a = 1 }
 assert_equal(a, 1, "block arg 1")
 func4(){ |b| a = b }
 assert_equal(a, 4, "block arg 2")
+f = proc(){ a = 5 }
+func3(&f)
+assert_equal(a, 5, "block arg 3")
 
 # Object methods
 

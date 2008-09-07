@@ -149,17 +149,6 @@ Ruby.Object = Ruby.defineClass("Object", {
       console.log(args[0]);
     }
     
-  },
-  "classMethods": {
-    
-    "new": asyncFunc(function(receiver, args, block, callback) {
-      var obj = new RubyObject(receiver);
-      Ruby.sendAsync(obj, "initialize", args, block, function(res, ex){
-        if (ex) return callback(null, ex);
-        callback(obj);
-      });
-    })
-    
   }
 });
 
@@ -207,7 +196,14 @@ Ruby.defineClass("Module", {
 });
 
 Ruby.defineClass("Class", {
-  "superClass": Ruby.Module
+  "superClass": Ruby.Module,
+  "instanceMethods": {
+    
+    "allocate": function(receiver) {
+      return new RubyObject(receiver);
+    }
+    
+  }
 });
 
 Ruby.Object.constants.Object = Ruby.Object;

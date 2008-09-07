@@ -276,7 +276,7 @@ RubyVM.prototype = {
         // Get the next command
         var cmd = opcode[ip];
         
-        if (me.debug) console.log(["ip", ip, cmd]);
+        if (me.debug) console.log(["ip", ip].concat(cmd));
         // If "cmd" is a Number then it is the line number.
         if (typeof(cmd) == "number") sf.lineNo = cmd;
         
@@ -499,25 +499,25 @@ RubyVM.prototype = {
               sf.sp = 0;
               break;
             case "send" :
+              var block = (cmd[4] & RubyVM.VM_CALL_ARGS_BLOCKARG_BIT) ? sf.stack[--sf.sp] : cmd[3];
               var args = sf.stack.slice(sf.sp - cmd[2], sf.sp);
               sf.sp -= cmd[2];
               var receiver = sf.stack[--sf.sp];
-              if(cmd[4] & RubyVM.VM_CALL_FCALL_BIT) {
+              if (cmd[4] & RubyVM.VM_CALL_FCALL_BIT) {
                 receiver = sf.self;
               }
-              var block = (cmd[4] & RubyVM.VM_CALL_ARGS_BLOCKARG_BIT) ? args.pop() : cmd[3];
-              if(block instanceof Array)
+              if (block instanceof Array)
                 block = Ruby.toRubyProc(block, sf);
               me.invokeMethodAndPush(
                 receiver, cmd[1], args, block, sf, cmd[4], false, null, bodyCallback);
               return;
             case "invokesuper" :
+              var block = (cmd[3] & RubyVM.VM_CALL_ARGS_BLOCKARG_BIT) ? sf.stack[--sf.sp] : cmd[2];
               var args = sf.stack.slice(sf.sp - cmd[1], sf.sp);
               sf.sp -= cmd[1];
               // TODO When to use this autoPassAllArgs?
               var autoPassAllArgs = sf.stack[--sf.sp];
-              var block = (cmd[3] & RubyVM.VM_CALL_ARGS_BLOCKARG_BIT) ? args.pop() : cmd[2];
-              if(block instanceof Array)
+              if (block instanceof Array)
                 block = Ruby.toRubyProc(block, sf);
               me.invokeMethodAndPush(
                 sf.self, sf.methodName, args, block, sf, cmd[3], true, sf.classObj, bodyCallback);
