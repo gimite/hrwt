@@ -372,17 +372,18 @@ RubyVM.prototype = {
               break;
             case "newarray" :
               var value = Ruby.toRubyArray(sf.stack.slice(sf.sp - cmd[1], sf.sp));
-              sf.sp -= value.value.length;
+              sf.sp -= cmd[1];
               sf.stack[sf.sp++] = value;
               break;
             case "duparray" :
               sf.stack[sf.sp++] = Ruby.toRubyArray(cmd[1]);
               break;
             case "expandarray" :
-              var ary = sf.stack[--sf.sp];
-              if(typeof(ary) == "object" && ary.rubyClass == Ruby.Array) {
+              var obj = sf.stack[--sf.sp];
+              if(typeof(obj) == "object" && obj.rubyClass == Ruby.Array) {
+                var ary = Ruby.rubyObjectToNative(obj);
                 for(var i = cmd[1] - 1; i >= 0; i--) {
-                  sf.stack[sf.sp++] = ary.value[i];            
+                  sf.stack[sf.sp++] = ary[i];
                 }
                 if(cmd[2] && 1) {
                   // TODO
@@ -394,7 +395,7 @@ RubyVM.prototype = {
                   // TODO
                 }
               } else {
-                sf.stack[sf.sp++] = ary;
+                sf.stack[sf.sp++] = obj;
                 for (var i = 0;i < cmd[1] - 1; i++) {
                   sf.stack[sf.sp++] = null;
                 }
@@ -751,7 +752,7 @@ RubyVM.prototype = {
     
     // Splat array args
     if (type & RubyVM.VM_CALL_ARGS_SPLAT_BIT) {
-      args = args.concat(args.pop().value);
+      args = args.concat(Ruby.rubyObjectToNative(args.pop()));
     }
     
     // Exec method
@@ -776,6 +777,17 @@ RubyVM.prototype = {
         Ruby.fatal("[invokeMethod] Unknown function type : " + typeof(func));
     }
     
+  },
+  
+  respondTo: function(receiver, methodName) {
+    var singletonClass = receiver !== null ? receiver.singletonClass : null;
+    var searchClass = singletonClass || Ruby.getClass(receiver);
+    var func = null;
+    Ruby.eachAncestor(searchClass, function(c) {
+      func = c.methods[methodName];
+      if (func) return true;
+    });
+    return func != null;
   },
   
   /**

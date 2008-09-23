@@ -45,6 +45,11 @@ Ruby.Object = Ruby.defineClass("Object", {
       Ruby.sendAsync(receiver, "==", args, block, callback);
     }),
     
+    "respond_to?": function(receiver, args) {
+      var methodName = args[0];
+      return Ruby.vm.respondTo(receiver, methodName.value);
+    },
+    
     "object_id": function(receiver) {
       return 0; // TODO: implement it
     },
@@ -201,6 +206,10 @@ Ruby.defineClass("Class", {
     
     "allocate": function(receiver) {
       return new RubyObject(receiver);
+    },
+    
+    "private": function(receiver, args) {
+      // TODO: implement
     }
     
   }
@@ -511,6 +520,7 @@ Ruby.defineClass("String", {
   }
 });
 
+/*
 Ruby.defineClass("Array", {
   "instanceMethods": {
     "length" : function(receiver) {
@@ -543,6 +553,7 @@ Ruby.defineClass("Array", {
     }
   }
 });
+*/
 
 Ruby.defineModule("Enumerable", {});
 

@@ -112,6 +112,8 @@ var Ruby = {
       };
       func.proc = v;
       return func;
+    } else if (v.rubyClass == Ruby.Array) {
+      return v.instanceVars["@tuple"].value;
     }
     return v.value;
   },
@@ -196,11 +198,17 @@ var Ruby = {
   /**
    * JavaScript Array -> Ruby Array
    * @param {Array} ary
-   * @return {Array}
+   * @return {RubyObject}
    */
   toRubyArray : function(ary) {
+    var tuple = new RubyObject(Ruby.Tuple);
+    tuple.value = ary;
     var obj = new RubyObject(Ruby.Array);
-    obj.value = ary;
+    obj.instanceVars = {
+      "@start": 0,
+      "@total": ary.length,
+      "@tuple": tuple
+    };
     return obj;
   },
   

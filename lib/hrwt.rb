@@ -17,6 +17,7 @@ module HRWT
       "lib/hrwt/rpc_base.rb",
       "lib/hrwt/rpc_client.rb",
       "lib/core/tuple.rb",
+      "lib/core/array.rb",
     ]
     
   module_function
