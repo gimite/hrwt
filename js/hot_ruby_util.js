@@ -78,9 +78,21 @@ var Ruby = {
     return new RubyModule(className, params);
   },
   
+  defineMethod: function(classObj, name, func) {
+    classObj.methods[name] = func;
+  },
+  
   makeModuleFunction: function(classObj, name) {
     // TODO: make it private
     Ruby.getSingletonClass(classObj).methods[name] = classObj.methods[name];
+  },
+  
+  getInstanceVar: function(receiver, name) {
+    return receiver.instanceVars[name];
+  },
+  
+  setInstanceVar: function(receiver, name, value) {
+    receiver.instanceVars[name] = value;
   },
   
   /**
@@ -258,6 +270,14 @@ var Ruby = {
     return val !== false && val !== null;
   },
   
+  getGlobalVar: function(name) {
+    return Ruby.vm.globalVars[name];
+  },
+  
+  setGlobalVar: function(name, value) {
+    Ruby.vm.globalVars[name] = value;
+  },
+  
   // Async version of for (; cond(); increment()) { body(); }
   loopAsync: function(cond, increment, body, callback) {
     var deferred = false;
@@ -308,7 +328,7 @@ var Ruby = {
 
   fatal: function(message) {
     console.error(message);
-    throw "Aborted";
+    Aborted.aborted;
   }
 
 };

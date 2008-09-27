@@ -71,6 +71,7 @@ Ruby.Object = Ruby.defineClass("Object", {
     
     // Global functions
     
+    /*
     "puts" : function(receiver, args) {
       if(args.length == 0) {
         Ruby.printDebug("");
@@ -112,21 +113,10 @@ Ruby.Object = Ruby.defineClass("Object", {
       }
     }),
     
-    "sleep" : asyncFunc(function(receiver, args, block, callback) {
-      setTimeout(callback, args[0] * 1000);
-    }),
-    
-    "proc": asyncFunc(function(receiver, args, block, callback) {
-      Ruby.sendAsync(Ruby.Proc, "new", args, block, callback);
-    }),
-    
     "require": function(receiver, args) {
       // Not implemented
     },
-    
-    "raise": asyncFunc(function(receiver, args, block, callback) {
-      callback(null, args[0]);
-    }),
+    */
     
     // JS only functions
     
@@ -171,6 +161,10 @@ Ruby.defineClass("Module", {
       }
     },
     
+    "private": function(receiver, args) {
+      // TODO: implement
+    },
+    
     "module_function": function(receiver, args) {
       if (args.length == 0) {
         receiver.scope = "module_function";
@@ -193,6 +187,14 @@ Ruby.defineClass("Module", {
       return Ruby.toRubyArray(ary);
     },
     
+    "attr_reader": function(receiver, args) {
+      args.each(function(arg) {
+        Ruby.defineMethod(receiver, arg.value, function(obj) {
+          return Ruby.getInstanceVar(obj, "@" + arg.value);
+        });
+      });
+    },
+    
     "inspect": function(receiver) {
       return receiver.name;
     }
@@ -206,10 +208,6 @@ Ruby.defineClass("Class", {
     
     "allocate": function(receiver) {
       return new RubyObject(receiver);
-    },
-    
-    "private": function(receiver, args) {
-      // TODO: implement
     }
     
   }
@@ -232,6 +230,24 @@ Ruby.defineClass("NativeClass", {
 });
 
 Ruby.vm = new RubyVM();
+
+Ruby.defineModule("Kernel", {
+  "instanceMethods": {
+    
+    "__sleep__" : asyncFunc(function(receiver, args, block, callback) {
+      setTimeout(callback, args[0] * 1000);
+    }),
+    
+    "__proc__": asyncFunc(function(receiver, args, block, callback) {
+      Ruby.sendAsync(Ruby.Proc, "new", args, block, callback);
+    }),
+    
+    "__raise__": asyncFunc(function(receiver, args, block, callback) {
+      callback(null, args[0]);
+    })
+    
+  }
+});
 
 Ruby.defineClass("TrueClass", {
   "instanceMethods": {
@@ -697,7 +713,7 @@ Ruby.defineClass("Thread", {
     
   }
 });
-    
+
 Ruby.defineClass("Time", {
   "instanceMethods": {
     
@@ -716,7 +732,24 @@ Ruby.defineClass("Time", {
   }
 });
 
+Ruby.defineClass("IO", {
+  "instanceMethods": {
+    
+    "write" : function(receiver, args) {
+      // For now, only supports console output.
+      Ruby.printDebug(args[0].value);
+    }
+    
+  }
+});
+
+Ruby.defineClass("Exception", {
+  "instanceMethods": {
+  }
+});
+
 Ruby.defineClass("StandardError", {
+  "superClass": Ruby.Exception,
   "instanceMethods": {
   }
 });

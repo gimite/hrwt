@@ -13,11 +13,13 @@ module HRWT
     }
 
     REQUIRED_PATHS = [
+      "lib/hrwt/bootstrap.rb",
+      "lib/core/kernel.rb",
+      "lib/core/tuple.rb",
+      "lib/core/array.rb",
       "lib/hrwt/builtin.rb",
       "lib/hrwt/rpc_base.rb",
       "lib/hrwt/rpc_client.rb",
-      "lib/core/tuple.rb",
-      "lib/core/array.rb",
     ]
     
   module_function

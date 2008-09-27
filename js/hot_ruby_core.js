@@ -33,6 +33,7 @@ var RubyModule = function(className, params) {
   this.methods = params.instanceMethods || {};
   this.constants = params.constants || {};
   this.classVars = params.classVars || {};
+  this.instanceVars = params.instanceVars || {};
   this.included = params.included || [];
   if (this.type != "singleton") {
     this.singletonClass = new RubyModule(null, {
@@ -727,7 +728,7 @@ RubyVM.prototype = {
       return;
     }
     
-    var singletonClass = receiver !== null ? receiver.singletonClass : null;
+    var singletonClass = receiver != null ? receiver.singletonClass : null;
     var searchClass = singletonClass || receiverClass;
     
     var skip = invokeSuper;
