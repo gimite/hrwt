@@ -14,6 +14,10 @@ Ruby.Object = Ruby.defineClass("Object", {
       Ruby.fatal("Undefined method `" + args[0].value + "' for " + Ruby.getClass(receiver).name);
     },
     
+    "equal?" : function(receiver, args) {
+      return receiver == args[0];  
+    },
+    
     "==" : function(receiver, args) {
       return receiver == args[0];  
     },
@@ -242,6 +246,10 @@ Ruby.defineModule("Kernel", {
       Ruby.sendAsync(Ruby.Proc, "new", args, block, callback);
     }),
     
+    "__block_given__": function(receiver) {
+      return Ruby.vm.latestStackFrame.block != null;
+    },
+    
     "__raise__": asyncFunc(function(receiver, args, block, callback) {
       callback(null, args[0]);
     })
@@ -267,7 +275,7 @@ Ruby.defineClass("TrueClass", {
       return args[0] ? false : true;
     },
 
-    "inspect" : function(receiver) {
+    "to_s" : function(receiver) {
       return "true";
     }
   }
@@ -291,7 +299,7 @@ Ruby.defineClass("FalseClass", {
       return args[0] ? true : false;
     },
 
-    "inspect" : function(receiver) {
+    "to_s" : function(receiver) {
       return "false";
     }
   }
@@ -569,9 +577,9 @@ Ruby.defineClass("Array", {
     }
   }
 });
-*/
 
 Ruby.defineModule("Enumerable", {});
+*/
 
 Ruby.defineClass("Tuple", {
   "instanceMethods": {

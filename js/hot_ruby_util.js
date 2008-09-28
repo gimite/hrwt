@@ -309,13 +309,14 @@ var Ruby = {
   printDebug : function(str) {
     switch(Ruby.vm.env) {
       case "browser":
-        var div = document.createElement("div");
-        var text = document.createTextNode(str);
-        div.appendChild(text);
-        Ruby.vm.debugDom.appendChild(div);
+        var out = Ruby.vm.debugDom;
+        str.split(/(\n)/).each(function(piece) {
+          var node = piece == "\n" ? document.createElement("br") : document.createTextNode(piece);
+          out.appendChild(node);
+        });
         break;
       case "flash":
-        RubyVM.debugTextField.text += str + "\n";
+        RubyVM.debugTextField.text += str;
         break;
       case "console":
         print(str);

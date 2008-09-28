@@ -191,6 +191,8 @@ RubyVM.prototype = {
     sf.block = block;
     sf.catchTable = opcode[10];
     
+    var prevSF = me.latestStackFrame;
+    me.latestStackFrame = sf;
     if(me.topSF == null) me.topSF = sf;
     
     var minArgc, labels, restIndex, blockIndex;
@@ -223,6 +225,8 @@ RubyVM.prototype = {
     
     // Run the mainLoop
     me.mainLoop(opcode[11], sf, startLabel, function(res, ex) {
+      
+      me.latestStackFrame = prevSF;
       
       if (ex) return callback(null, ex);
       

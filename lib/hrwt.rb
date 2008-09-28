@@ -15,6 +15,8 @@ module HRWT
     REQUIRED_PATHS = [
       "lib/hrwt/bootstrap.rb",
       "lib/core/kernel.rb",
+      "lib/core/misc.rb",
+      "lib/core/enumerable.rb",
       "lib/core/tuple.rb",
       "lib/core/array.rb",
       "lib/hrwt/builtin.rb",
