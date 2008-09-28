@@ -20,6 +20,17 @@ class Class
 end
 
 
+class Array
+    
+    def dup()
+      return Array.new(self)
+    end
+    
+    attr_reader(:tuple, :total, :start)
+    
+end
+
+
 class Hash
     
     def each(&block)
@@ -115,15 +126,8 @@ class Integer
 end
 
 
-class Array
-    
-    def dup()
-      return Array.new(self)
-    end
-    
-    attr_reader(:tuple, :total, :start)
-    
-end
+module CType; end
+module Precision; end
 
 
 JS.debug = old_debug

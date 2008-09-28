@@ -20,6 +20,15 @@ module Kernel
 end
 
 
+class Integer
+    
+    alias_method(:&, :__and__)
+    alias_method(:|, :__or__)
+    alias_method(:^, :__xor__)
+    
+end
+
+
 # Dummy implementation
 module RecursionGuard
     

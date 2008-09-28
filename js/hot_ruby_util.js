@@ -251,12 +251,12 @@ var Ruby = {
    * @param {Number} first
    * @param {boolean} exclude_end
    */
-  toRubyRange : function(last, first, exclude_end) {
+  toRubyRange : function(first, last, exclude_end) {
     var obj = new RubyObject(Ruby.Range);
     obj.instanceVars = {
-      first : first,
-      last : last,
-      exclude_end : exclude_end
+      "@begin": first,
+      "@end": last,
+      "@excl": exclude_end
     };
     return obj;
   },

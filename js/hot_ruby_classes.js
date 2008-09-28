@@ -406,8 +406,13 @@ Ruby.defineClass("Float", {
   }
 });
 
+Ruby.defineClass("Numeric", {
+});
+
 Ruby.defineClass("Integer", {
+  "superClass": Ruby.Numeric,
   "instanceMethods": {
+    
     "+" : function(receiver, args) {
       return receiver + args[0];
     },
@@ -457,6 +462,34 @@ Ruby.defineClass("Integer", {
       return receiver == args[0];
     },
 
+    "<<" : function(receiver, args) {
+      return receiver << args[0];
+    },
+    
+    ">>" : function(receiver, args) {
+      return receiver >> args[0];
+    },
+    
+    "__and__" : function(receiver, args) {
+      return receiver & args[0];
+    },
+    
+    "__or__" : function(receiver, args) {
+      return receiver | args[0];
+    },
+    
+    "__xor__" : function(receiver, args) {
+      return receiver ^ args[0];
+    },
+    
+    "succ" : function(receiver) {
+      return receiver + 1;
+    },
+
+    "hash" : function(receiver) {
+      return receiver; // TODO: better value
+    },
+
     "times" : asyncFunc(function(receiver, args, block, callback) {
       var i = 0;
       Ruby.loopAsync(
@@ -472,6 +505,7 @@ Ruby.defineClass("Integer", {
     "inspect" : function(receiver) {
       return receiver.toString();
     }
+    
   }
 });
 
@@ -655,6 +689,7 @@ Ruby.defineClass("Hash", {
   }
 });
 
+/*
 Ruby.defineClass("Range", {
   "instanceMethods": {
     "each" : asyncFunc(function(receiver, args, block, callback) {
@@ -709,6 +744,7 @@ Ruby.defineClass("Range", {
     })
   }
 });
+*/
 
 Ruby.defineClass("Thread", {
   "instanceMethods": {

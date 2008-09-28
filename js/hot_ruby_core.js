@@ -332,13 +332,13 @@ RubyVM.prototype = {
               if (typeof(value) == "string") {
                 if (value.match(/^(\d+)\.\.(\d+)$/)) {
                   value = Ruby.toRubyRange(
-                    parseInt(RegExp.$2), 
                     parseInt(RegExp.$1), 
+                    parseInt(RegExp.$2), 
                     false);
                 } else if(value.match(/^(\d+)\.\.\.(\d+)$/)) {
                   value = Ruby.toRubyRange(
-                    parseInt(RegExp.$2), 
                     parseInt(RegExp.$1), 
+                    parseInt(RegExp.$2), 
                     true);
                 } else {
                   value = Ruby.toRubyString(value);
@@ -412,7 +412,9 @@ RubyVM.prototype = {
               sf.stack[sf.sp++] = hash;
               break;
             case "newrange" :
-              var value = Ruby.toRubyRange(sf.stack[--sf.sp], sf.stack[--sf.sp], cmd[1]);
+              var last = sf.stack[--sf.sp];
+              var first = sf.stack[--sf.sp];
+              var value = Ruby.toRubyRange(first, last, cmd[1]);
               sf.stack[sf.sp++] = value;
               break;
             case "setlocal" :
