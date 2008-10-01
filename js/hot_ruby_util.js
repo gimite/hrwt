@@ -21,6 +21,22 @@ var Ruby = {
     Ruby.vm.invokeMethod(receiver, name, args, block, 0, false, null, callback);
   },
   
+  sendSync: function(receiver, name, args, block) {
+    var done = false;
+    var result;
+    Ruby.vm.invokeMethod(receiver, name, args, block, 0, false, null, function(res, ex) {
+      if (ex) {
+        // TODO: throw instead
+        Ruby.fatal("Exception in sendSync: " + ex);
+      } else {
+        done = true;
+        result = res;
+      }
+    });
+    if (!done) Ruby.fatal("Async call inside sendSync");
+    return result;
+  },
+  
   /**
    * Returns class name from object.
    * @param obj
@@ -126,6 +142,8 @@ var Ruby = {
       return func;
     } else if (v.rubyClass == Ruby.Array) {
       return v.instanceVars["@tuple"].value;
+    } else if (v.rubyClass == Ruby.Hash) {
+      Ruby.fatal("Ruby hash to native unimplemented");
     }
     return v.value;
   },
@@ -231,16 +249,9 @@ var Ruby = {
    */
   toRubyHash : function(ary) {
     var hash = new RubyObject(Ruby.Hash);
-    hash.instanceVars = {
-      length : ary.length / 2
-    };
-    hash.value = {};
+    Ruby.sendSync(hash, "initialize", []);
     for (var i = 0;i < ary.length; i += 2) {
-      if(ary[i] !== null && ary[i].rubyClass == Ruby.String) {
-        hash.value[ary[i].value] = ary[i + 1];
-      } else {
-        Ruby.fatal("[toRubyHash] Unsupported. Cannot put this object to Hash");
-      }
+      Ruby.sendSync(hash, "[]=", [ary[i], ary[i + 1]]);
     }
     return hash;
   },

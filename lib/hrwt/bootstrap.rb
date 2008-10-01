@@ -2,6 +2,25 @@ old_debug = JS.debug
 JS.debug = false
 
 
+module InstructionHelper
+    
+    def self.splat_array(obj)
+      if obj_kind_of?(obj, Array)
+        return obj
+      elsif obj.respond_to?(:to_a)
+        ret = obj.to_a()
+        if !obj_kind_of?(ret, Array)
+          raise(TypeError, "Coercion error: obj.to_a did NOT return a Array (was #{ret.class})")
+        end
+        return ret
+      else
+        return [obj]
+      end
+    end
+    
+end
+
+
 class Object
     
     include(Kernel)
@@ -32,25 +51,16 @@ end
 
 
 class Hash
-    
-    def each(&block)
-      for k in self.keys
-        block.call([k, self[k]])
-      end
-    end
-    
-    def map(&block)
-      result = []
-      for v in self
-        result.push(block.call(v))
-      end
-      return result
-    end
-    
-    def inspect
-      return "{" + self.map(){ |e| e[0].inspect + "=>" + e[1].inspect }.join(", ") + "}"
-    end
-    
+  
+  def initialize
+    @bins = 16
+    @values = Tuple.new(@bins)
+    @entries = 0
+  end
+  
+  def redistribute
+  end
+  
 end
 
 

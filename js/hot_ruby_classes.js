@@ -22,6 +22,10 @@ Ruby.Object = Ruby.defineClass("Object", {
       return receiver == args[0];  
     },
     
+    "eql?" : function(receiver, args) {
+      return receiver == args[0];  
+    },
+    
     "!=": asyncFunc(function(receiver, args, block, callback) {
       Ruby.sendAsync(receiver, "==", args, block, function(res, ex) {
         if (ex) return callback(null, ex);
@@ -534,6 +538,18 @@ Ruby.defineClass("String", {
       return receiver.value == args[0].value;
     },
     
+    "eql?" : function(receiver, args) {
+      return receiver.value == args[0].value;
+    },
+    
+    "hash" : function(receiver) {
+      var hash = 0;
+      for (var i = 0; i < receiver.value.length; ++i) {
+        hash += receiver.value.charCodeAt(i);
+      }
+      return hash;
+    },
+    
     "[]" : function(receiver, args) {
       if(args.length == 1 && typeof(args[0]) == "number") {
         var no = args[0];
@@ -578,43 +594,6 @@ Ruby.defineClass("String", {
   }
 });
 
-/*
-Ruby.defineClass("Array", {
-  "instanceMethods": {
-    "length" : function(receiver) {
-      return receiver.value.length;
-    },
-    
-    "size" : function(receiver) {
-      return receiver.value.length;
-    },
-    
-    "[]" : function(receiver, args) {
-      return receiver.value[args[0]];
-    },
-    
-    "[]=" : function(receiver, args) {
-      receiver.value[args[0]] = args[1];
-    },
-    
-    "push": function(receiver, args) {
-      receiver.value.push.apply(receiver.value, args);
-      return receiver;
-    },
-    
-    "join" : function(receiver, args) {
-      return receiver.value.join(args[0]);
-    },
-    
-    "to_s" : function(receiver, args) {
-      return receiver.value.join(args[0]);
-    }
-  }
-});
-
-Ruby.defineModule("Enumerable", {});
-*/
-
 Ruby.defineClass("Tuple", {
   "instanceMethods": {
     
@@ -639,7 +618,15 @@ Ruby.defineClass("Tuple", {
       return receiver.value[args[0]];
     },
     
+    "[]" : function(receiver, args) {
+      return receiver.value[args[0]];
+    },
+    
     "put" : function(receiver, args) {
+      receiver.value[args[0]] = args[1];
+    },
+    
+    "[]=" : function(receiver, args) {
       receiver.value[args[0]] = args[1];
     },
     
@@ -655,96 +642,6 @@ Ruby.defineClass("Tuple", {
     
   }
 });
-
-Ruby.defineClass("Hash", {
-  "instanceMethods": {
-    
-    "[]" : function(receiver, args) {
-      return receiver.value[args[0].value];
-    },
-    
-    "[]=" : function(receiver, args) {
-      if(!(args[0].value in receiver.value)) {
-        receiver.instanceVars.length++;
-      }
-      return (receiver.value[args[0].value] = args[1]);
-    },
-    
-    "length" : function(receiver) {
-      return receiver.instanceVars.length;
-    },
-    
-    "size" : function(receiver) {
-      return receiver.instanceVars.length;
-    },
-    
-    "keys": function(receiver) {
-      var keys = [];
-      for (var k in receiver.value) {
-        keys.push(Ruby.toRubyString(k));
-      }
-      return Ruby.toRubyArray(keys);
-    }
-    
-  }
-});
-
-/*
-Ruby.defineClass("Range", {
-  "instanceMethods": {
-    "each" : asyncFunc(function(receiver, args, block, callback) {
-      Ruby.sendAsync(receiver, "step", [], block, callback);
-    }),
-    
-    "begin" : function(receiver) {
-      return receiver.instanceVars.first;
-    },
-    
-    "first" : function(receiver) {
-      return receiver.instanceVars.first;
-    },
-    
-    "end" : function(receiver) {
-      return receiver.instanceVars.last;
-    },
-    
-    "last" : function(receiver) {
-      return receiver.instanceVars.last;
-    },
-    
-    "exclude_end?" : function(receiver) {
-      return receiver.instanceVars.exclude_end;
-    },
-    
-    "length" : function(receiver) {
-      with(receiver.instanceVars) {
-        return (last - first + (exclude_end ? 0 : 1));
-      }
-    },
-    
-    "size" : function(receiver) {
-      with(receiver.instanceVars) {
-        return (last - first + (exclude_end ? 0 : 1));
-      }
-    },
-    
-    "step" : asyncFunc(function(receiver, args, block, callback) {
-      var step = args[0] || 1;
-      var excludeEnd = receiver.instanceVars.exclude_end;
-      var last = receiver.instanceVars.last;
-      var i = receiver.instanceVars.first;
-      Ruby.loopAsync(
-        function() { return excludeEnd ? i < last : i <= last; },
-        function() { i += step; },
-        function(bodyCallback) {
-          Ruby.sendAsync(block, "yield", [i], bodyCallback);
-        },
-        callback
-      );
-    })
-  }
-});
-*/
 
 Ruby.defineClass("Thread", {
   "instanceMethods": {

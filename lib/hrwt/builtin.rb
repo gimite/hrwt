@@ -43,6 +43,7 @@ module RecursionGuard
 end
 
 
+Hash.after_loaded()
 $stdout = IO.new()
 $stderr = IO.new()
 

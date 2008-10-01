@@ -406,6 +406,11 @@ RubyVM.prototype = {
                 }
               }
               break;
+            case "splatarray" :
+              var obj = sf.stack[--sf.sp];
+              me.invokeMethodAndPush(
+                Ruby.InstructionHelper, "splat_array", [obj], null, sf, 0, false, null, bodyCallback);
+              return;
             case "newhash" :
               var hash = Ruby.toRubyHash(sf.stack.slice(sf.sp - cmd[1], sf.sp));
               sf.sp -= cmd[1];
