@@ -50,7 +50,7 @@ var Ruby = {
         return obj.rubyClass;
       case "number" :
         // TODO: Cannot distinguish 1 and 1.0. Fix it later.
-        return Math.floor(obj) == obj ? Ruby.Integer : Ruby.Float;
+        return Math.floor(obj) == obj ? Ruby.Fixnum : Ruby.Float;
       case "boolean" :
         return obj ? Ruby.TrueClass : Ruby.FalseClass;
       default :
@@ -251,7 +251,7 @@ var Ruby = {
     var hash = new RubyObject(Ruby.Hash);
     Ruby.sendSync(hash, "initialize", []);
     for (var i = 0;i < ary.length; i += 2) {
-      Ruby.sendSync(hash, "[]=", [ary[i], ary[i + 1]]);
+      Ruby.sendSync(hash, "set_key_cv", [ary[i], ary[i + 1]]);
     }
     return hash;
   },

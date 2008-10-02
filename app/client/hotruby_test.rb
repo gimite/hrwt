@@ -1,7 +1,7 @@
 # Literals
 
 assert_equal(1+2, 3, "int literal 1")
-assert_equal(1.class, Integer, "int literal 2")
+assert_equal(1.class, Fixnum, "int literal 2")
 assert_equal("hoge"+"foo", "hogefoo", "string literal 1")
 assert_equal("hoge".class, String, "string literal 2")
 assert_equal(true.class, TrueClass, "true literal")
@@ -235,26 +235,28 @@ end
 
 # Exceptions
 
-a = 0
+a = nil
 begin
-  raise(StandardError.new())
+  raise("foo")
   assert(false, "exception 1.1")
-rescue
-  a = 1
+rescue => ex
+  a = ex
 end
-assert_equal(a, 1, "exception 1.2")
+assert_equal(ex.class, RuntimeError, "exception 1.2")
+assert_equal(ex.message, "foo", "exception 1.3")
 
 def raise_func()
-  raise(StandardError.new())
+  raise(StandardError, "hoge")
 end
 
 begin
   raise_func()
   assert(false, "exception 2.1")
-rescue
-  a = 2
+rescue => ex
+  a = ex
 end
-assert_equal(a, 2, "exception 2.2")
+assert_equal(ex.class, StandardError, "exception 2.2")
+assert_equal(ex.message, "hoge", "exception 2.3")
 
 # break/return
 

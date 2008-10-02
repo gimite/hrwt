@@ -13,18 +13,34 @@ module Kernel
     alias_method(:block_given?, :__block_given__)
     module_function(:block_given?)
     
-    # TODO: support advanced usage
-    alias_method(:raise, :__raise__)
-    module_function(:proc)
-    
-end
+    # Based on Kernel#raise in lib/core/kernel.rb
+    def raise(exc=Undefined, msg=nil, trace=nil)
+      skip = false
+      if exc.equal? Undefined
+        exc = $!
+        if exc
+          skip = true
+        else
+          exc = RuntimeError.new("No current exception")
+        end
+      elsif exc.respond_to? :exception
+        exc = exc.exception msg
+        raise ::TypeError, 'exception class/object expected' unless exc.kind_of?(::Exception)
+        exc.set_backtrace trace if trace
+      elsif exc.kind_of? String or !exc
+        exc = ::RuntimeError.exception exc
+      else
+        raise ::TypeError, 'exception class/object expected'
+      end
 
+      if $DEBUG and $VERBOSE != nil
+        STDERR.puts "Exception: `#{exc.class}' #{sender.location} - #{exc.message}"
+      end
 
-class Integer
+      __raise__(exc)
+    end
     
-    alias_method(:&, :__and__)
-    alias_method(:|, :__or__)
-    alias_method(:^, :__xor__)
+    module_function(:raise)
     
 end
 

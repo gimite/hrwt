@@ -196,6 +196,7 @@ Ruby.defineClass("Module", {
     },
     
     "attr_reader": function(receiver, args) {
+      // TODO: rewrite it without dynamic function.
       args.each(function(arg) {
         Ruby.defineMethod(receiver, arg.value, function(obj) {
           return Ruby.getInstanceVar(obj, "@" + arg.value);
@@ -203,8 +204,25 @@ Ruby.defineClass("Module", {
       });
     },
     
+    "attr_writer": function(receiver, args) {
+      // TODO: rewrite it without dynamic function.
+      args.each(function(arg) {
+        Ruby.defineMethod(receiver, arg.value + "=", function(obj, writerArgs) {
+          return Ruby.setInstanceVar(obj, "@" + arg.value, writerArgs[0]);
+        });
+      });
+    },
+    
+    "name": function(receiver) {
+      return receiver.name;
+    },
+    
     "inspect": function(receiver) {
       return receiver.name;
+    },
+    
+    "ivar_as_index": function(receiver) {
+      // Dummy for Rubinius specific method.
     }
     
   }
@@ -414,7 +432,11 @@ Ruby.defineClass("Numeric", {
 });
 
 Ruby.defineClass("Integer", {
-  "superClass": Ruby.Numeric,
+  "superClass": Ruby.Numeric
+});
+
+Ruby.defineClass("Fixnum", {
+  "superClass": Ruby.Integer,
   "instanceMethods": {
     
     "+" : function(receiver, args) {
@@ -474,15 +496,15 @@ Ruby.defineClass("Integer", {
       return receiver >> args[0];
     },
     
-    "__and__" : function(receiver, args) {
+    "&" : function(receiver, args) {
       return receiver & args[0];
     },
     
-    "__or__" : function(receiver, args) {
+    "|" : function(receiver, args) {
       return receiver | args[0];
     },
     
-    "__xor__" : function(receiver, args) {
+    "^" : function(receiver, args) {
       return receiver ^ args[0];
     },
     
@@ -685,14 +707,6 @@ Ruby.defineClass("IO", {
 });
 
 Ruby.defineClass("Exception", {
-  "instanceMethods": {
-  }
-});
-
-Ruby.defineClass("StandardError", {
-  "superClass": Ruby.Exception,
-  "instanceMethods": {
-  }
 });
 
 Ruby.defineClass("BreakException", {

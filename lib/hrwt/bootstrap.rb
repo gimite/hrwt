@@ -28,6 +28,16 @@ class Object
 end
 
 
+class Module
+    
+    def attr_accessor(*args)
+      attr_reader(*args)
+      attr_writer(*args)
+    end
+    
+end
+
+
 class Class
     
     def new(*args, &block)
@@ -93,9 +103,6 @@ end
 
 
 # Temporary implementations
-
-
-Fixnum = Integer
 
 
 class Object
