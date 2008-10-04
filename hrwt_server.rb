@@ -1,5 +1,5 @@
-if RUBY_VERSION != "1.9.0" || RUBY_REVISION != 15660
-  $stderr.puts("HRWT runs only on Ruby 1.9.0-1 (2008-03-01 revision 15660).")
+if RUBY_VERSION != "1.9.0" || !(15660..15664).include?(RUBY_REVISION)
+  $stderr.puts("HRWT runs only on Ruby 1.9.0-1 (2008-03-01 revision 15664).")
   $stderr.puts("If you want to try on other version, edit the condition in hrwt_server.rb")
   $stderr.puts("and probably you also need some code modification.")
   exit(1)
