@@ -87,7 +87,7 @@ Ruby.Object = Ruby.defineClass("Object", {
       }
       for(var i=0; i<args.length; i++) {
         var obj = args[i];
-        if(obj === null) {
+        if(obj == null) {
           Ruby.printDebug("nil");
           continue;
         }
@@ -743,7 +743,7 @@ Ruby.defineClass("JSON", {
     "parse": function(self, args) {
       var obj = eval("(" + args[0].value + ")");
       function convert(obj) {
-        if (obj === null || typeof(obj) == "boolean" || typeof(obj) == "number") {
+        if (obj == null || typeof(obj) == "boolean" || typeof(obj) == "number") {
           return obj;
         } else if (typeof(obj) == "string") {
           return Ruby.newRubyString(obj);
@@ -766,24 +766,25 @@ Ruby.defineClass("JSON", {
     
     "unparse": function(self, args) {
       function convert(obj) {
-        if (obj === null) {
+        if (obj == null) {
           return "null";
         }else if (typeof(obj) == "boolean" || typeof(obj) == "number") {
           return obj.toString();
         } else if (typeof(obj) == "string") {
           return '"' + obj.replace(/([\\"])/g, "\\$1") + '"';
         } else if (obj.rubyClass == Ruby.String) {
-          return convert(obj.value);
+          return convert(Ruby.toNative(obj));
         } else if (obj.rubyClass == Ruby.Array) {
-          var ary = new Array(obj.value.length);
-          for (var i = 0; i < obj.value.length; ++i) {
-            ary[i] = convert(obj.value[i]);
+          var ary = new Array(Ruby.arraySize(obj));
+          for (var i = 0; i < ary.length; ++i) {
+            ary[i] = convert(Ruby.arrayAt(obj, i));
           }
           return "[" + ary.join(",") + "]";
         } else if (obj.rubyClass == Ruby.Hash) {
+          var keys = Ruby.hashKeys(obj);
           var ary = [];
-          for (var k in obj.value) {
-            ary.push(convert(k) + ":" + convert(obj.value[k]));
+          for (var i = 0; i < keys.length; ++i) {
+            ary.push(convert(keys[i]) + ":" + convert(Ruby.hashGet(obj, keys[i])));
           }
           return "{" + ary.join(",") + "}";
         }
@@ -800,22 +801,20 @@ Ruby.defineClass("JS", {
   "classMethods": {
     
     "http_request": asyncFunc(function(self, args, block, callback) {
-      var method = args[0];
-      var url = args[1];
-      var data = args[2];
-      if (Ruby.getClass(data) == Ruby.Hash) {
+      var method = Ruby.toNative(args[0]);
+      var url = Ruby.toNative(args[1]);
+      var data = Ruby.toNative(args[2]);
+      if (data != null && typeof(data) == "object") { // originally Hash
         var ary = [];
-        for (var k in data.value) {
-          ary.push(k + "=" + encodeURIComponent(data.value[k].value));
+        for (var k in data) {
+          ary.push(k + "=" + encodeURIComponent(data[k]));
         }
         data = ary.join("&");
-      } else {
-        data = data && data.value;
       }
       new Ajax.Request(
-        url.value,
+        url,
         {
-          method: method.value,
+          method: method,
           parameters: data,
           onSuccess: function(response) {
             callback(response.responseText);

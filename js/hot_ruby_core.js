@@ -390,9 +390,8 @@ RubyVM.prototype = {
             case "expandarray" :
               var obj = sf.stack[--sf.sp];
               if(typeof(obj) == "object" && obj.rubyClass == Ruby.Array) {
-                var ary = Ruby.toNative(obj);
                 for(var i = cmd[1] - 1; i >= 0; i--) {
-                  sf.stack[sf.sp++] = ary[i];
+                  sf.stack[sf.sp++] = Ruby.arrayAt(obj, i);
                 }
                 if(cmd[2] && 1) {
                   // TODO
@@ -565,7 +564,7 @@ RubyVM.prototype = {
             case "defineclass" :
               var superClass = sf.stack[--sf.sp];
               var isRedefine = superClass === false;
-              if(superClass === null)
+              if(superClass == null)
                 superClass = Ruby.Object;
               var cbaseObj = sf.stack[--sf.sp];
               if(cmd[3] == 0 || cmd[3] == 2) {
@@ -768,7 +767,11 @@ RubyVM.prototype = {
     
     // Splat array args
     if (type & RubyVM.VM_CALL_ARGS_SPLAT_BIT) {
-      args = args.concat(Ruby.toNative(args.pop()));
+      var last = args.pop();
+      var size = Ruby.arraySize(last);
+      for (var i = 0; i < size; ++i) {
+        args.push(Ruby.arrayAt(last, i));
+      }
     }
     
     // Exec method
@@ -796,7 +799,7 @@ RubyVM.prototype = {
   },
   
   respondTo: function(receiver, methodName) {
-    var singletonClass = receiver !== null ? receiver.singletonClass : null;
+    var singletonClass = receiver != null ? receiver.singletonClass : null;
     var searchClass = singletonClass || Ruby.getClass(receiver);
     var func = null;
     Ruby.eachAncestor(searchClass, function(c) {
@@ -956,7 +959,7 @@ RubyVM.prototype = {
    * @private
    */
   setConstant : function(sf, classObj, constName, constValue) {
-    if (classObj === null) {
+    if (classObj == null) {
       classObj = sf.classObj;
     } else if (classObj === false) {
       // TODO
@@ -974,7 +977,7 @@ RubyVM.prototype = {
    * @private
    */
   getConstant : function(sf, classObj, constName) {
-    if (classObj === null) {
+    if (classObj == null) {
       var isFound = false;
       // Search outer(parentStackFrame)
       // TODO: this seems broken

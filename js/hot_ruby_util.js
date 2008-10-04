@@ -59,7 +59,7 @@ var Ruby = {
   },
   
   getSingletonClass: function(obj) {
-    if (obj !== null && obj.rubyClass) {
+    if (obj != null && obj.rubyClass) {
       if (!obj.singletonClass) {
         obj.singletonClass = new RubyModule(null, {
           superClass: obj.rubyClass,
@@ -116,9 +116,9 @@ var Ruby = {
    * @param v ruby object
    */
   toNative: function(v) {
-    if(typeof(v) != "object") 
+    if (v == null || typeof(v) != "object") {
       return v;
-    if(v.rubyClass == Ruby.Proc) {
+    } else if (v.rubyClass == Ruby.Proc) {
       var func = function() {
         var proc = arguments.callee.proc;
         var result;
@@ -141,11 +141,22 @@ var Ruby = {
       func.proc = v;
       return func;
     } else if (v.rubyClass == Ruby.Array) {
-      return v.instanceVars["@tuple"].value;
+      return v.instanceVars["@tuple"].value.map(function(e) {
+        return Ruby.toNative(e);
+      });
     } else if (v.rubyClass == Ruby.Hash) {
-      Ruby.fatal("Ruby hash to native unimplemented");
+      var keys = Ruby.sendSync(v, "keys", []);
+      var numKeys = Ruby.arraySize(keys);
+      var hash = {};
+      for (var i = 0; i < numKeys; ++i) {
+        var key = Ruby.arrayAt(keys, i);
+        if (Ruby.getClass(key) != Ruby.String) Ruby.fatal("Key must be String");
+        hash[Ruby.toNative(key)] = Ruby.toNative(Ruby.sendSync(v, "get_key_cv", [key]));
+      }
+      return hash;
+    } else {
+      return v.value;
     }
-    return v.value;
   },
   
   /**
@@ -168,7 +179,7 @@ var Ruby = {
     if (typeof(v) == "undefined") {
       return null;
     }
-    if (v === null || typeof(v) == "boolean" || typeof(v) == "number") {
+    if (v == null || typeof(v) == "boolean" || typeof(v) == "number") {
       return v;  
     }
     if (typeof(v) == "object" && v.rubyClass) {
@@ -278,7 +289,28 @@ var Ruby = {
   },
   
   toBoolean: function(val) {
-    return val !== false && val !== null;
+    return val !== false && val != null;
+  },
+  
+  arrayAt: function(rary, index) {
+    return rary.instanceVars["@tuple"].value[index];
+  },
+  
+  arraySize: function(rary) {
+    return rary.instanceVars["@total"];
+  },
+  
+  hashGet: function(rhash, key) {
+    return Ruby.sendSync(rhash, "get_key_cv", [key]);
+  },
+  
+  hashKeys: function(rhash) {
+    var rkeys = Ruby.sendSync(rhash, "keys", []);
+    var keys = new Array(Ruby.arraySize(rkeys));
+    for (var i = 0; i < keys.length; ++i) {
+      keys[i] = Ruby.arrayAt(rkeys, i);
+    }
+    return keys;
   },
   
   getGlobalVar: function(name) {

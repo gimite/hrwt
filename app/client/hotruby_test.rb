@@ -292,5 +292,12 @@ end
 
 assert_equal(br_bar(), "bar", "return 1")
 
+# JSON
+
+hash = {"hoge"=>"foo", "bar"=>"boke"}
+json = '{"hoge":"foo","bar":"boke"}'
+assert_equal(JSON.unparse(hash), json, "json 1")
+assert_equal(JSON.parse(json), hash, "json 2")
+
 
 puts("Passed all tests.")
