@@ -11,12 +11,12 @@
     function run(debug) {
       var src = document.getElementById("srcArea").value;
       Ruby.vm.debug = debug;
-      Ruby.vm.compileAndRun("compile", {src: src});
+      Ruby.vm.compileAndRun({src: src});
     }
     
     function runFile(file, debug) {
       Ruby.vm.debug = debug;
-      Ruby.vm.compileAndRun("iseq/" + file, {});
+      Ruby.vm.compileAndRun({url: "iseq/" + file});
     }
     
     function init() {
@@ -34,8 +34,12 @@
     <a href="chat">Chat (Demo)</a>
   </p>
   
-  <div>Source:<br />
-    <textarea id="srcArea" rows="7" style="width:100%">Thread.new() do
+  <table border="0" cellpadding="5" width="100%">
+    <tr><th>Source</th><th>Output</th></tr>
+    <tr>
+      <td width="50%" valign="top">
+        
+        <textarea id="srcArea" rows="7" style="width:100%">Thread.new() do
   for i in 0...3
     puts("sub " + i.to_s())
     sleep 1
@@ -47,14 +51,19 @@ for i in 0...3
   puts("main " + i.to_s())
   sleep 1
 end
-</textarea><br />
+        </textarea><br />
 
-    <input type="button" onclick="javascript:run(false)" value="Run">
-    <input type="button" onclick="javascript:run(true)" value="Run (dbg)">
-    <input type="button" onclick="javascript:runFile('hotruby_test', false)" value="Run tests">
-    <input type="button" onclick="javascript:runFile('hotruby_test', true)" value="Run tests (dbg)">
-  </div>
-  <div>Result:</div>
-  <div id="debug" class="result"></div>
+        <input type="button" onclick="javascript:run(false)" value="Run">
+        <input type="button" onclick="javascript:run(true)" value="Run (dbg)">
+        <input type="button" onclick="javascript:runFile('hotruby_test', false)" value="Run tests">
+        <input type="button" onclick="javascript:runFile('hotruby_test', true)" value="Run tests (dbg)">
+      </td>
+      <td width="50%" valign="top">
+        
+        <div id="debug" class="result"></div>
+        
+      </td>
+    </tr>
+  </table>
 
 </body></html>

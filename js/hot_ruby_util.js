@@ -340,6 +340,7 @@ var Ruby = {
 
   fatal: function(message) {
     console.error(message);
+    this.printDebug(message + "\n");
     Aborted.aborted;
   }
 

@@ -508,6 +508,7 @@ Ruby.defineClass("Fixnum", {
       return receiver ^ args[0];
     },
     
+    // Overrides Ruby implementation to make it faster.
     "succ" : function(receiver) {
       return receiver + 1;
     },
@@ -516,6 +517,7 @@ Ruby.defineClass("Fixnum", {
       return receiver; // TODO: better value
     },
 
+    // Overrides Ruby implementation to make it faster.
     "times" : asyncFunc(function(receiver, args, block, callback) {
       var i = 0;
       Ruby.loopAsync(
@@ -838,4 +840,13 @@ Ruby.defineClass("JS", {
   }
 });
 
-Ruby.Object.constants["RUBY_PLATFORM"] = Ruby.toRubyString("hotruby");
+Ruby.Object.constants["RUBY_PLATFORM"] = Ruby.toRubyString("javascript-hotruby");
+
+// Defines builtin classes written in Ruby.
+Ruby.vm.compileAndRun("builtin", function(res, ex) {
+  if (ex) return;
+  Ruby.vm.loaded = true;
+  Ruby.vm.onLoaded.each(function(handler) {
+    handler();
+  });
+});

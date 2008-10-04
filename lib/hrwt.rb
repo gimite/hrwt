@@ -30,13 +30,17 @@ module HRWT
     
   module_function
 
-    def compile(src, require_defaults = true)
-      if require_defaults
-        src = REQUIRED_PATHS.map(){ |s| File.read(s) }.join("") + src
-      end
-      inst = VM::InstructionSequence.compile(src, "src", 1, OutputCompileOption).to_a()
-      inst = convert_objects(inst) # TODO: write seriously
-      return inst.to_json()
+    def compile(src)
+      return [compile_to_array(src, "src")].to_json()
+    end
+    
+    def builtin_iseqs
+      return REQUIRED_PATHS.map(){ |s| compile_to_array(File.read(s), s) }.to_json()
+    end
+    
+    def compile_to_array(src, file_name)
+      inst = VM::InstructionSequence.compile(src, file_name, 1, OutputCompileOption).to_a()
+      return convert_objects(inst) # TODO: write seriously
     end
     
     def convert_objects(obj)

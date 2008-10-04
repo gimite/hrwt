@@ -50,6 +50,11 @@ Dir["app/client/*.html"].each() do |path|
   server.mount("/#{file_name}", WEBrick::HTTPServlet::FileHandler, path)
 end
 
+server.mount_proc("/iseq/builtin") do |req, res|
+  res["Content-Type"] = "text/javascript"
+  res.body = HRWT.builtin_iseqs
+end
+
 server.mount_proc("/compile") do |req, res|
   compile(req.query["src"], req, res)
 end

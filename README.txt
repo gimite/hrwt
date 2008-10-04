@@ -41,14 +41,18 @@ Modified HotRuby is in js/hot_ruby_*.js. I implemented some of Ruby features mis
 - Singleton classes
 
 
-* Licence
+* Licence / Copyright
 
-Ruby Licence.
+js/hot_ruby_*.js:
+  Ruby Licence
+  Author: id:yukoba (http://hotruby.accelart.jp/)
 
+js/prototype-1.6.0.2.js:
+  See the file
 
-* Copyright
+lib/core/*:
+  Taken from Rubinius (http://rubini.us/)
 
-js/hot_ruby_*.js: id:yukoba (http://hotruby.accelart.jp/)
-js/prototype-1.6.0.2.js: see the file
-lib/core/*: see the file
-Others: Hiroshi Ichikawa (Gimite) (http://gimite.net/)
+Others:
+  Ruby Licence
+  Author: Hiroshi Ichikawa (Gimite) (http://gimite.net/)

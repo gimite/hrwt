@@ -68,6 +68,7 @@ RubyModule.prototype = {
  * @construtor
  */
 var RubyVM = function() {
+  this.compilerUrl = "compile";
   /** 
    * Global Variables
    * @type Object 
@@ -87,6 +88,9 @@ var RubyVM = function() {
   this.env = "browser";
   this.topObject = new RubyObject(Ruby.Object);
   this.topSF = null;
+  
+  this.loaded = false;
+  this.onLoaded = [];
   
   this.checkEnv();
 };
@@ -1045,7 +1049,7 @@ RubyVM.prototype = {
     for(var i=0; i < ary.length; i++) {
       var hoge = ary[i].type;
       if(ary[i].type == "text/ruby") {
-        this.compileAndRun(url, {src: ary[i].text});
+        this.compileAndRun({src: ary[i].text});
         break;
       }
     }
@@ -1056,8 +1060,21 @@ RubyVM.prototype = {
    * @param {String} url Ruby compiler url
    * @param {src} Ruby source
    */
-  compileAndRun : function(url, params) {
+  compileAndRun : function(source, callback) {
     var me = this;
+    var url;
+    var params = {};
+    if (source == "builtin") {
+      url = "iseq/builtin";
+    } else if (source.url) {
+      url = source.url;
+    } else if (source.src) {
+      url = me.compilerUrl;
+      params["src"] = source.src;
+    } else {
+      throw "Unknown source";
+    }
+    
     var paramAry = [];
     for (var k in params) {
       paramAry.push(k + "=" + encodeURIComponent(params[k]));
@@ -1072,13 +1089,15 @@ RubyVM.prototype = {
             if(response.responseText.length == 0) {
               alert("Compile failed");
             } else {
-              me.run(eval("(" + response.responseText + ")"), function(res, ex) {
-                if (ex) {
-                  console.log("Error: ", ex);
-                } else {
-                  console.log("Done");
-                }
-              });
+              var opcodes = eval("(" + response.responseText + ")");
+              if (!me.loaded && source != "builtin") {
+                // Waits until builtin classes are loaded.
+                me.onLoaded.push(function() {
+                  me.runOpcodes(opcodes, callback);
+                });
+              } else {
+                me.runOpcodes(opcodes, callback);
+              }
             }
           } catch (ex) {
             console.error(ex);
@@ -1087,6 +1106,29 @@ RubyVM.prototype = {
         onFailure: function(response) {
           alert("Compile failed");
         }
+      }
+    );
+  },
+  
+  runOpcodes: function(opcodes, callback) {
+    var me = this;
+    var i = 0;
+    Ruby.loopAsync(
+      function() { return i < opcodes.length; },
+      function() { ++i; },
+      function(bodyCallback) {
+        me.run(opcodes[i], function(res, ex) {
+          if (ex) {
+            console.error("Error: ", ex);
+            if (callback) callback(null, ex);
+          } else {
+            bodyCallback();
+          }
+        })
+      },
+      function() {
+        console.log("Done");
+        if (callback) callback();
       }
     );
   },
