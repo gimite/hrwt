@@ -220,7 +220,7 @@ RubyVM.prototype = {
       sf.localVars[sf.localVars.length - 1 - i] = args[i];
     }
     if (restIndex != -1) {
-      sf.localVars[sf.localVars.length - 1 - restIndex] = Ruby.toRubyArray(args.slice(normalArgc));
+      sf.localVars[sf.localVars.length - 1 - restIndex] = Ruby.newRubyArray(args.slice(normalArgc));
     }
     if (blockIndex != -1) {
       sf.localVars[sf.localVars.length - 1 - blockIndex] = block;
@@ -335,17 +335,17 @@ RubyVM.prototype = {
               var value = cmd[1];
               if (typeof(value) == "string") {
                 if (value.match(/^(\d+)\.\.(\d+)$/)) {
-                  value = Ruby.toRubyRange(
+                  value = Ruby.newRubyRange(
                     parseInt(RegExp.$1), 
                     parseInt(RegExp.$2), 
                     false);
                 } else if(value.match(/^(\d+)\.\.\.(\d+)$/)) {
-                  value = Ruby.toRubyRange(
+                  value = Ruby.newRubyRange(
                     parseInt(RegExp.$1), 
                     parseInt(RegExp.$2), 
                     true);
                 } else {
-                  value = Ruby.toRubyString(value);
+                  value = Ruby.newRubyString(value);
                 }
               } else if (typeof(value) == "object") {
                 if (value.type == "symbol") {
@@ -359,7 +359,7 @@ RubyVM.prototype = {
               sf.stack[sf.sp++] = value;
               break;
             case "putstring" :
-              sf.stack[sf.sp++] = Ruby.toRubyString(cmd[1]);
+              sf.stack[sf.sp++] = Ruby.newRubyString(cmd[1]);
               break;
             case "tostring" :
               if (Ruby.getClass(sf.stack[sf.sp - 1]) != Ruby.String) {
@@ -377,20 +377,20 @@ RubyVM.prototype = {
                 str += sf.stack[i].value;
               }
               sf.sp -= cmd[1];
-              sf.stack[sf.sp++] = Ruby.toRubyString(str);
+              sf.stack[sf.sp++] = Ruby.newRubyString(str);
               break;
             case "newarray" :
-              var value = Ruby.toRubyArray(sf.stack.slice(sf.sp - cmd[1], sf.sp));
+              var value = Ruby.newRubyArray(sf.stack.slice(sf.sp - cmd[1], sf.sp));
               sf.sp -= cmd[1];
               sf.stack[sf.sp++] = value;
               break;
             case "duparray" :
-              sf.stack[sf.sp++] = Ruby.toRubyArray(cmd[1]);
+              sf.stack[sf.sp++] = Ruby.newRubyArray(cmd[1]);
               break;
             case "expandarray" :
               var obj = sf.stack[--sf.sp];
               if(typeof(obj) == "object" && obj.rubyClass == Ruby.Array) {
-                var ary = Ruby.rubyObjectToNative(obj);
+                var ary = Ruby.toNative(obj);
                 for(var i = cmd[1] - 1; i >= 0; i--) {
                   sf.stack[sf.sp++] = ary[i];
                 }
@@ -416,14 +416,14 @@ RubyVM.prototype = {
                 Ruby.InstructionHelper, "splat_array", [obj], null, sf, 0, false, null, bodyCallback);
               return;
             case "newhash" :
-              var hash = Ruby.toRubyHash(sf.stack.slice(sf.sp - cmd[1], sf.sp));
+              var hash = Ruby.newRubyHash(sf.stack.slice(sf.sp - cmd[1], sf.sp));
               sf.sp -= cmd[1];
               sf.stack[sf.sp++] = hash;
               break;
             case "newrange" :
               var last = sf.stack[--sf.sp];
               var first = sf.stack[--sf.sp];
-              var value = Ruby.toRubyRange(first, last, cmd[1]);
+              var value = Ruby.newRubyRange(first, last, cmd[1]);
               sf.stack[sf.sp++] = value;
               break;
             case "setlocal" :
@@ -524,7 +524,7 @@ RubyVM.prototype = {
                 receiver = sf.self;
               }
               if (block instanceof Array)
-                block = Ruby.toRubyProc(block, sf);
+                block = Ruby.newRubyProc(block, sf);
               me.invokeMethodAndPush(
                 receiver, cmd[1], args, block, sf, cmd[4], false, null, bodyCallback);
               return;
@@ -535,7 +535,7 @@ RubyVM.prototype = {
               // TODO When to use this autoPassAllArgs?
               var autoPassAllArgs = sf.stack[--sf.sp];
               if (block instanceof Array)
-                block = Ruby.toRubyProc(block, sf);
+                block = Ruby.newRubyProc(block, sf);
               me.invokeMethodAndPush(
                 sf.self, sf.methodName, args, block, sf, cmd[3], true, sf.classObj, bodyCallback);
               return;
@@ -768,7 +768,7 @@ RubyVM.prototype = {
     
     // Splat array args
     if (type & RubyVM.VM_CALL_ARGS_SPLAT_BIT) {
-      args = args.concat(Ruby.rubyObjectToNative(args.pop()));
+      args = args.concat(Ruby.toNative(args.pop()));
     }
     
     // Exec method
@@ -777,12 +777,12 @@ RubyVM.prototype = {
         if (func.async) {
           func.call(me, receiver, args, block, function(res, ex) {
             if (ex) return callback(null, ex);
-            callback(Ruby.nativeToRubyObject(res));
+            callback(Ruby.toRuby(res));
           });
           return;
         } else {
           var res = func.call(me, receiver, args, block);
-          callback(Ruby.nativeToRubyObject(res));
+          callback(Ruby.toRuby(res));
         }
         break;
       case "object" :
@@ -853,9 +853,9 @@ RubyVM.prototype = {
       var v = eval("(" + varName + ")");
       if (typeof(v) != "undefined") {
         if (args.length > 0) {
-          var convArgs = Ruby.rubyObjectAryToNativeAry(args);
+          var convArgs = Ruby.arrayRubyToNative(args);
           var ret = v.apply(null, convArgs);
-          return Ruby.nativeToRubyObject(ret);
+          return Ruby.toRuby(ret);
         } else {
           var obj = new RubyObject(Ruby.NativeObject);
           obj.value = v;
@@ -904,7 +904,7 @@ RubyVM.prototype = {
       // Invoke native method
       if(op != null)
         Ruby.fatal("[invokeNativeMethod] Unsupported operator: " + op);
-      var convArgs = Ruby.rubyObjectAryToNativeAry(args);
+      var convArgs = Ruby.arrayRubyToNative(args);
       ret = receiver.value[methodName].apply(receiver.value, convArgs);
     } else {
       // Get native instance variable
@@ -913,14 +913,14 @@ RubyVM.prototype = {
       } else {
         switch(op) {
           case "=": 
-            ret = receiver.value[methodName] = Ruby.rubyObjectToNative(args[0]);
+            ret = receiver.value[methodName] = Ruby.toNative(args[0]);
             break;
           default:
             Ruby.fatal("[invokeNativeMethod] Unsupported operator: " + op);
         }
       }
     }
-    return Ruby.nativeToRubyObject(ret);
+    return Ruby.toRuby(ret);
   },
   
   /**
@@ -928,7 +928,7 @@ RubyVM.prototype = {
    */
   invokeNativeNew: function(receiver, methodName, args) {
     var obj;
-    var args = Ruby.rubyObjectAryToNativeAry(args);
+    var args = Ruby.arrayRubyToNative(args);
     switch(args.length) {
       case 0: obj = new receiver.value(); break; 
       case 1: obj = new receiver.value(args[0]); break; 

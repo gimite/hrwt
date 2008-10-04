@@ -30,11 +30,11 @@ ftp://ftp.ruby-lang.org/pub/ruby/1.9/
 Modified HotRuby is in js/hot_ruby_*.js. I implemented some of Ruby features missing in original HotRuby, and fixed several bugs. Newly implemented features are:
 
 - Synchronous call to asynchronous JavaScript functions (e.g. Ajax, setTimeout)
+- Many additional Ruby builtin methods imported from Rubinius (lib/core/*.rb, still in progress)
 - Pseudo thread
 - Exceptions
 - break/return in blocks
 - Modules
-- Some of missing Ruby builtin methods (some are implemented with Ruby at lib/hrwt/builtin.rb)
 - yield (invokeblock)
 - *, & in parameters and default arguments
 - method_missing

@@ -3,38 +3,38 @@
 Ruby.Object = Ruby.defineClass("Object", {
   "instanceMethods": {
     
-    "initialize": function(receiver) {
+    "initialize": function(self) {
     },
     
-    "class": function(receiver) {
-      return Ruby.getClass(receiver);
+    "class": function(self) {
+      return Ruby.getClass(self);
     },
     
-    "method_missing": function(receiver, args) {
-      Ruby.fatal("Undefined method `" + args[0].value + "' for " + Ruby.getClass(receiver).name);
+    "method_missing": function(self, args) {
+      Ruby.fatal("Undefined method `" + args[0].value + "' for " + Ruby.getClass(self).name);
     },
     
-    "equal?" : function(receiver, args) {
-      return receiver == args[0];  
+    "equal?" : function(self, args) {
+      return self == args[0];  
     },
     
-    "==" : function(receiver, args) {
-      return receiver == args[0];  
+    "==" : function(self, args) {
+      return self == args[0];  
     },
     
-    "eql?" : function(receiver, args) {
-      return receiver == args[0];  
+    "eql?" : function(self, args) {
+      return self == args[0];  
     },
     
-    "!=": asyncFunc(function(receiver, args, block, callback) {
-      Ruby.sendAsync(receiver, "==", args, block, function(res, ex) {
+    "!=": asyncFunc(function(self, args, block, callback) {
+      Ruby.sendAsync(self, "==", args, block, function(res, ex) {
         if (ex) return callback(null, ex);
         callback(!res);
       });
     }),
     
-    "is_a?": function(receiver, args) {
-      var classObj = Ruby.getClass(receiver);
+    "is_a?": function(self, args) {
+      var classObj = Ruby.getClass(self);
       while (classObj) {
         if (classObj == args[0]) return true;
         for (var i = 0; i < classObj.included.length; ++i) {
@@ -45,42 +45,42 @@ Ruby.Object = Ruby.defineClass("Object", {
       return false;
     },
     
-    "kind_of?": asyncFunc(function(receiver, args, block, callback) {
-      Ruby.sendAsync(receiver, "is_a?", args, block, callback);
+    "kind_of?": asyncFunc(function(self, args, block, callback) {
+      Ruby.sendAsync(self, "is_a?", args, block, callback);
     }),
     
-    "===": asyncFunc(function(receiver, args, block, callback) {
-      Ruby.sendAsync(receiver, "==", args, block, callback);
+    "===": asyncFunc(function(self, args, block, callback) {
+      Ruby.sendAsync(self, "==", args, block, callback);
     }),
     
-    "respond_to?": function(receiver, args) {
+    "respond_to?": function(self, args) {
       var methodName = args[0];
-      return Ruby.vm.respondTo(receiver, methodName.value);
+      return Ruby.vm.respondTo(self, methodName.value);
     },
     
-    "object_id": function(receiver) {
+    "object_id": function(self) {
       return 0; // TODO: implement it
     },
     
-    "__send__": asyncFunc(function(receiver, args, block, callback) {
-      Ruby.sendAsync(receiver, args[0].value, args.slice(1), block, callback);
+    "__send__": asyncFunc(function(self, args, block, callback) {
+      Ruby.sendAsync(self, args[0].value, args.slice(1), block, callback);
     }),
     
-    "to_s" : function(receiver) {
-      if(typeof(receiver) == "number")
-        return receiver.toString();
+    "to_s" : function(self) {
+      if(typeof(self) == "number")
+        return self.toString();
       else
-        return receiver.value.toString();
+        return self.value.toString();
     },
     
-    "inspect": function(receiver) {
-      return "#<" + Ruby.getClass(receiver).name + ":????>";
+    "inspect": function(self) {
+      return "#<" + Ruby.getClass(self).name + ":????>";
     },
     
     // Global functions
     
     /*
-    "puts" : function(receiver, args) {
+    "puts" : function(self, args) {
       if(args.length == 0) {
         Ruby.printDebug("");
         return;
@@ -110,7 +110,7 @@ Ruby.Object = Ruby.defineClass("Object", {
       }
     },
     
-    "p" : asyncFunc(function(receiver, args, block, callback) {
+    "p" : asyncFunc(function(self, args, block, callback) {
       if (args.length == 1) {
         Ruby.sendAsync(args[0], "inspect", function(res, ex) {
           Ruby.printDebug(res.value);
@@ -121,14 +121,14 @@ Ruby.Object = Ruby.defineClass("Object", {
       }
     }),
     
-    "require": function(receiver, args) {
+    "require": function(self, args) {
       // Not implemented
     },
     */
     
     // JS only functions
     
-    "assert": function(receiver, args) {
+    "assert": function(self, args) {
       console.log(args[1].value);
       if (!Ruby.toBoolean(args[0])) {
         console.error("Assertion failed: " + args[1].value);
@@ -136,7 +136,7 @@ Ruby.Object = Ruby.defineClass("Object", {
       }
     },
     
-    "assert_equal": asyncFunc(function(receiver, args, block, callback) {
+    "assert_equal": asyncFunc(function(self, args, block, callback) {
       console.log(args[2].value);
       Ruby.sendAsync(args[0], "==", [args[1]], function(res, ex) {
         if (ex) return callback(null, ex);
@@ -148,7 +148,7 @@ Ruby.Object = Ruby.defineClass("Object", {
       });
     }),
     
-    "jp": function(receiver, args) {
+    "jp": function(self, args) {
       console.log(args[0]);
     }
     
@@ -159,69 +159,69 @@ Ruby.defineClass("Module", {
   "superClass": Ruby.Object,
   "instanceMethods": {
     
-    "===": asyncFunc(function(receiver, args, block, callback) {
-      Ruby.sendAsync(args[0], "is_a?", [receiver], callback);
+    "===": asyncFunc(function(self, args, block, callback) {
+      Ruby.sendAsync(args[0], "is_a?", [self], callback);
     }),
     
-    "include": function(receiver, args) {
+    "include": function(self, args) {
       for (var i = 0; i < args.length; ++i) {
-        Ruby.vm.includeModule(receiver, args[i]);
+        Ruby.vm.includeModule(self, args[i]);
       }
     },
     
-    "private": function(receiver, args) {
+    "private": function(self, args) {
       // TODO: implement
     },
     
-    "module_function": function(receiver, args) {
+    "module_function": function(self, args) {
       if (args.length == 0) {
-        receiver.scope = "module_function";
+        self.scope = "module_function";
       } else {
         for (var i = 0; i < args.length; ++i) {
-          Ruby.makeModuleFunction(receiver, args[i].value);
+          Ruby.makeModuleFunction(self, args[i].value);
         }
       }
     },
     
-    "alias_method": function(receiver, args) {
-      receiver.methods[args[0].value] = receiver.methods[args[1].value];
+    "alias_method": function(self, args) {
+      self.methods[args[0].value] = self.methods[args[1].value];
     },
     
-    "ancestors": function(receiver) {
+    "ancestors": function(self) {
       var ary = [];
-      Ruby.eachAncestor(receiver, function(c) {
+      Ruby.eachAncestor(self, function(c) {
         ary.push(c);
       });
-      return Ruby.toRubyArray(ary);
+      return Ruby.newRubyArray(ary);
     },
     
-    "attr_reader": function(receiver, args) {
+    "attr_reader": function(self, args) {
       // TODO: rewrite it without dynamic function.
       args.each(function(arg) {
-        Ruby.defineMethod(receiver, arg.value, function(obj) {
+        Ruby.defineMethod(self, arg.value, function(obj) {
           return Ruby.getInstanceVar(obj, "@" + arg.value);
         });
       });
     },
     
-    "attr_writer": function(receiver, args) {
+    "attr_writer": function(self, args) {
       // TODO: rewrite it without dynamic function.
       args.each(function(arg) {
-        Ruby.defineMethod(receiver, arg.value + "=", function(obj, writerArgs) {
+        Ruby.defineMethod(self, arg.value + "=", function(obj, writerArgs) {
           return Ruby.setInstanceVar(obj, "@" + arg.value, writerArgs[0]);
         });
       });
     },
     
-    "name": function(receiver) {
-      return receiver.name;
+    "name": function(self) {
+      return self.name;
     },
     
-    "inspect": function(receiver) {
-      return receiver.name;
+    "inspect": function(self) {
+      return self.name;
     },
     
-    "ivar_as_index": function(receiver) {
+    "ivar_as_index": function(self) {
       // Dummy for Rubinius specific method.
     }
     
@@ -232,8 +232,8 @@ Ruby.defineClass("Class", {
   "superClass": Ruby.Module,
   "instanceMethods": {
     
-    "allocate": function(receiver) {
-      return new RubyObject(receiver);
+    "allocate": function(self) {
+      return new RubyObject(self);
     }
     
   }
@@ -260,19 +260,19 @@ Ruby.vm = new RubyVM();
 Ruby.defineModule("Kernel", {
   "instanceMethods": {
     
-    "__sleep__" : asyncFunc(function(receiver, args, block, callback) {
+    "__sleep__" : asyncFunc(function(self, args, block, callback) {
       setTimeout(callback, args[0] * 1000);
     }),
     
-    "__proc__": asyncFunc(function(receiver, args, block, callback) {
+    "__proc__": asyncFunc(function(self, args, block, callback) {
       Ruby.sendAsync(Ruby.Proc, "new", args, block, callback);
     }),
     
-    "__block_given__": function(receiver) {
+    "__block_given__": function(self) {
       return Ruby.vm.latestStackFrame.block != null;
     },
     
-    "__raise__": asyncFunc(function(receiver, args, block, callback) {
+    "__raise__": asyncFunc(function(self, args, block, callback) {
       callback(null, args[0]);
     })
     
@@ -281,23 +281,23 @@ Ruby.defineModule("Kernel", {
 
 Ruby.defineClass("TrueClass", {
   "instanceMethods": {
-    "!" : function(receiver) {
+    "!" : function(self) {
       return false;
     },
     
-    "&" : function(receiver, args) {
+    "&" : function(self, args) {
       return args[0] ? true : false;
     },
     
-    "|" : function(receiver, args) {
+    "|" : function(self, args) {
       return true;
     },
 
-    "^" : function(receiver, args) {
+    "^" : function(self, args) {
       return args[0] ? false : true;
     },
 
-    "to_s" : function(receiver) {
+    "to_s" : function(self) {
       return "true";
     }
   }
@@ -305,23 +305,23 @@ Ruby.defineClass("TrueClass", {
 
 Ruby.defineClass("FalseClass", {
   "instanceMethods": {
-    "!" : function(receiver) {
+    "!" : function(self) {
       return true;
     },
     
-    "&" : function(receiver, args) {
+    "&" : function(self, args) {
       return false;
     },
     
-    "|" : function(receiver, args) {
+    "|" : function(self, args) {
       return args[0] ? true : false;
     },
 
-    "^" : function(receiver, args) {
+    "^" : function(self, args) {
       return args[0] ? true : false;
     },
 
-    "to_s" : function(receiver) {
+    "to_s" : function(self) {
       return "false";
     }
   }
@@ -329,7 +329,7 @@ Ruby.defineClass("FalseClass", {
 
 Ruby.defineClass("NilClass", {
   "instanceMethods": {
-    "inspect" : function(receiver) {
+    "inspect" : function(self) {
       return "nil";
     }
   },
@@ -337,31 +337,31 @@ Ruby.defineClass("NilClass", {
 
 Ruby.defineClass("Proc", {
   "instanceMethods": {
-    "initialize" : function(receiver, args, block) {
-      receiver.opcode = block.opcode;
-      receiver.parentStackFrame = block.parentStackFrame;
+    "initialize" : function(self, args, block) {
+      self.opcode = block.opcode;
+      self.parentStackFrame = block.parentStackFrame;
     },
     
-    "yield" : asyncFunc(function(receiver, args, block, callback) {
+    "yield" : asyncFunc(function(self, args, block, callback) {
       Ruby.vm.runOpcode(
-        receiver.opcode, 
-        receiver.parentStackFrame.classObj, 
-        receiver.parentStackFrame.methodName, 
-        receiver.parentStackFrame.self, 
+        self.opcode, 
+        self.parentStackFrame.classObj, 
+        self.parentStackFrame.methodName, 
+        self.parentStackFrame.self, 
         args, 
         block,
-        receiver.parentStackFrame,
+        self.parentStackFrame,
         true,
         function(res, ex) {
           if (ex) return callback(null, ex);
-          var sf = receiver.parentStackFrame;
+          var sf = self.parentStackFrame;
           callback(sf.stack[--sf.sp]);
         }
       );
     }),
     
-    "call": asyncFunc(function(receiver, args, block, callback) {
-      Ruby.sendAsync(receiver, "yield", args, block, callback);
+    "call": asyncFunc(function(self, args, block, callback) {
+      Ruby.sendAsync(self, "yield", args, block, callback);
     })
     
   }
@@ -369,61 +369,61 @@ Ruby.defineClass("Proc", {
 
 Ruby.defineClass("Float", {
   "instanceMethods": {
-    "+" : function(receiver, args) {
-      return receiver + args[0];
+    "+" : function(self, args) {
+      return self + args[0];
     },
 
-    "-" : function(receiver, args) {
-      return receiver - args[0];
+    "-" : function(self, args) {
+      return self - args[0];
     },
 
-    "*" : function(receiver, args) {
-      return receiver * args[0];
+    "*" : function(self, args) {
+      return self * args[0];
     },
 
-    "/" : function(receiver, args) {
-      return receiver / args[0];
+    "/" : function(self, args) {
+      return self / args[0];
     },
     
-    "%" : function(receiver, args) {
-      return receiver % args[0];
+    "%" : function(self, args) {
+      return self % args[0];
     },
     
-    "<=>" : function(receiver, args) {
-      if(receiver > args[0])
+    "<=>" : function(self, args) {
+      if(self > args[0])
         return 1;
-      else if(receiver == args[0])
+      else if(self == args[0])
         return 0;
-      if(receiver < args[0])
+      if(self < args[0])
         return -1;
     },
     
-    "<" : function(receiver, args) {
-      return receiver < args[0];
+    "<" : function(self, args) {
+      return self < args[0];
     },
 
-    ">" : function(receiver, args) {
-      return receiver > args[0];
+    ">" : function(self, args) {
+      return self > args[0];
     },
     
-    "<=" : function(receiver, args) {
-      return receiver <= args[0];
+    "<=" : function(self, args) {
+      return self <= args[0];
     },
 
-    ">=" : function(receiver, args) {
-      return receiver >= args[0];
+    ">=" : function(self, args) {
+      return self >= args[0];
     },
     
-    "==" : function(receiver, args) {
-      return receiver == args[0];
+    "==" : function(self, args) {
+      return self == args[0];
     },
     
-    "to_s" : function(receiver) {
-      return receiver.toString();
+    "to_s" : function(self) {
+      return self.toString();
     },
 
-    "inspect" : function(receiver) {
-      return receiver.toString();
+    "inspect" : function(self) {
+      return self.toString();
     }
   }
 });
@@ -439,89 +439,89 @@ Ruby.defineClass("Fixnum", {
   "superClass": Ruby.Integer,
   "instanceMethods": {
     
-    "+" : function(receiver, args) {
-      return receiver + args[0];
+    "+" : function(self, args) {
+      return self + args[0];
     },
 
-    "-" : function(receiver, args) {
-      return receiver - args[0];
+    "-" : function(self, args) {
+      return self - args[0];
     },
 
-    "*" : function(receiver, args) {
-      return receiver * args[0];
+    "*" : function(self, args) {
+      return self * args[0];
     },
 
-    "/" : function(receiver, args) {
-      return Math.floor(receiver / args[0]);
+    "/" : function(self, args) {
+      return Math.floor(self / args[0]);
     },
     
-    "%" : function(receiver, args) {
-      return receiver % args[0];
+    "%" : function(self, args) {
+      return self % args[0];
     },
     
-    "<=>" : function(receiver, args) {
-      if(receiver > args[0])
+    "<=>" : function(self, args) {
+      if(self > args[0])
         return 1;
-      else if(receiver == args[0])
+      else if(self == args[0])
         return 0;
-      if(receiver < args[0])
+      if(self < args[0])
         return -1;
     },
     
-    "<" : function(receiver, args) {
-      return receiver < args[0];
+    "<" : function(self, args) {
+      return self < args[0];
     },
 
-    ">" : function(receiver, args) {
-      return receiver > args[0];
+    ">" : function(self, args) {
+      return self > args[0];
     },
     
-    "<=" : function(receiver, args) {
-      return receiver <= args[0];
+    "<=" : function(self, args) {
+      return self <= args[0];
     },
 
-    ">=" : function(receiver, args) {
-      return receiver >= args[0];
+    ">=" : function(self, args) {
+      return self >= args[0];
     },
     
-    "==" : function(receiver, args) {
-      return receiver == args[0];
+    "==" : function(self, args) {
+      return self == args[0];
     },
 
-    "<<" : function(receiver, args) {
-      return receiver << args[0];
+    "<<" : function(self, args) {
+      return self << args[0];
     },
     
-    ">>" : function(receiver, args) {
-      return receiver >> args[0];
+    ">>" : function(self, args) {
+      return self >> args[0];
     },
     
-    "&" : function(receiver, args) {
-      return receiver & args[0];
+    "&" : function(self, args) {
+      return self & args[0];
     },
     
-    "|" : function(receiver, args) {
-      return receiver | args[0];
+    "|" : function(self, args) {
+      return self | args[0];
     },
     
-    "^" : function(receiver, args) {
-      return receiver ^ args[0];
+    "^" : function(self, args) {
+      return self ^ args[0];
     },
     
     // Overrides Ruby implementation to make it faster.
-    "succ" : function(receiver) {
-      return receiver + 1;
+    "succ" : function(self) {
+      return self + 1;
     },
 
-    "hash" : function(receiver) {
-      return receiver; // TODO: better value
+    "hash" : function(self) {
+      return self; // TODO: better value
     },
 
     // Overrides Ruby implementation to make it faster.
-    "times" : asyncFunc(function(receiver, args, block, callback) {
+    "times" : asyncFunc(function(self, args, block, callback) {
       var i = 0;
       Ruby.loopAsync(
-        function() { return i < receiver; },
+        function() { return i < self; },
         function() { ++i; },
         function(bodyCallback) {
           Ruby.sendAsync(block, "yield", [i], bodyCallback);
@@ -530,8 +530,8 @@ Ruby.defineClass("Fixnum", {
       );
     }),
     
-    "inspect" : function(receiver) {
-      return receiver.toString();
+    "inspect" : function(self) {
+      return self.toString();
     }
     
   }
@@ -539,81 +539,81 @@ Ruby.defineClass("Fixnum", {
 
 Ruby.defineClass("String", {
   "instanceMethods": {
-    "+" : function(receiver, args) {
+    "+" : function(self, args) {
       if(typeof(args[0]) == "object")
-        return receiver.value + args[0].value;
+        return self.value + args[0].value;
       else
-        return receiver.value + args[0];
+        return self.value + args[0];
     },
     
-    "<<": function(receiver, args) {
-      receiver.value += args[0].value;
+    "<<": function(self, args) {
+      self.value += args[0].value;
     },
     
-    "*" : function(receiver, args) {
+    "*" : function(self, args) {
       var ary = new Array(args[0]);
       for(var i=0; i<args[0]; i++) {
-        ary[i] = receiver.value;
+        ary[i] = self.value;
       }
       return ary.join("");
     },
     
-    "==" : function(receiver, args) {
-      return receiver.value == args[0].value;
+    "==" : function(self, args) {
+      return self.value == args[0].value;
     },
     
-    "eql?" : function(receiver, args) {
-      return receiver.value == args[0].value;
+    "eql?" : function(self, args) {
+      return self.value == args[0].value;
     },
     
-    "hash" : function(receiver) {
+    "hash" : function(self) {
       var hash = 0;
-      for (var i = 0; i < receiver.value.length; ++i) {
-        hash += receiver.value.charCodeAt(i);
+      for (var i = 0; i < self.value.length; ++i) {
+        hash += self.value.charCodeAt(i);
       }
       return hash;
     },
     
-    "[]" : function(receiver, args) {
+    "[]" : function(self, args) {
       if(args.length == 1 && typeof(args[0]) == "number") {
         var no = args[0];
         if(no < 0) 
-          no = receiver.value.length + no;
-        if(no < 0 || no >= receiver.value.length)
+          no = self.value.length + no;
+        if(no < 0 || no >= self.value.length)
           return null;
-        return receiver.value.charCodeAt(no);
+        return self.value.charCodeAt(no);
       } else if(args.length == 2 && typeof(args[0]) == "number" && typeof(args[1]) == "number") {
         var start = args[0];
         if(start < 0) 
-          start = receiver.value.length + start;
-        if(start < 0 || start >= receiver.value.length)
+          start = self.value.length + start;
+        if(start < 0 || start >= self.value.length)
           return null;
-        if(args[1] < 0 || start + args[1] > receiver.value.length)
+        if(args[1] < 0 || start + args[1] > self.value.length)
           return null;
-        return receiver.value.substr(start, args[1]);
+        return self.value.substr(start, args[1]);
       } else {
         Ruby.fatal("Unsupported String[]");
       }
     },
     
-    "length": function(receiver) {
-      return receiver.value.length;
+    "length": function(self) {
+      return self.value.length;
     },
     
-    "empty?": function(receiver) {
-      return receiver.value.length == 0;
+    "empty?": function(self) {
+      return self.value.length == 0;
     },
     
-    "dup": function(receiver) {
-      return Ruby.toRubyString(receiver.value);
+    "dup": function(self) {
+      return Ruby.newRubyString(self.value);
     },
     
-    "to_s": function(receiver) {
-      return receiver;
+    "to_s": function(self) {
+      return self;
     },
 
-    "inspect" : function(receiver) {
-      return '"' + receiver.value + '"';
+    "inspect" : function(self) {
+      return '"' + self.value + '"';
     }
   }
 });
@@ -621,45 +621,45 @@ Ruby.defineClass("String", {
 Ruby.defineClass("Tuple", {
   "instanceMethods": {
     
-    "initialize" : function(receiver, args) {
-      receiver.value = new Array(args[0]);
+    "initialize" : function(self, args) {
+      self.value = new Array(args[0]);
       for (var i = 0; i < args[0]; ++i) {
-        receiver.value[i] = null;
+        self.value[i] = null;
       }
     },
     
-    "dup": function(receiver) {
+    "dup": function(self) {
       var res = new RubyObject(Ruby.Tuple);
-      res.value = receiver.value.concat([]);
+      res.value = self.value.concat([]);
       return res;
     },
     
-    "fields" : function(receiver) {
-      return receiver.value.length;
+    "fields" : function(self) {
+      return self.value.length;
     },
     
-    "at" : function(receiver, args) {
-      return receiver.value[args[0]];
+    "at" : function(self, args) {
+      return self.value[args[0]];
     },
     
-    "[]" : function(receiver, args) {
-      return receiver.value[args[0]];
+    "[]" : function(self, args) {
+      return self.value[args[0]];
     },
     
-    "put" : function(receiver, args) {
-      receiver.value[args[0]] = args[1];
+    "put" : function(self, args) {
+      self.value[args[0]] = args[1];
     },
     
-    "[]=" : function(receiver, args) {
-      receiver.value[args[0]] = args[1];
+    "[]=" : function(self, args) {
+      self.value[args[0]] = args[1];
     },
     
-    "copy_from": function(receiver, args) {
+    "copy_from": function(self, args) {
       var other = args[0];
       var op = args[1];
       var sp = args[2];
       for (; op < other.value.length; ++op) {
-        receiver.value[sp] = other.value[op];
+        self.value[sp] = other.value[op];
         ++sp;
       }
     }
@@ -670,7 +670,7 @@ Ruby.defineClass("Tuple", {
 Ruby.defineClass("Thread", {
   "instanceMethods": {
     
-    "initialize" : function(receiver, args, block) {
+    "initialize" : function(self, args, block) {
       setTimeout(function() {
         Ruby.sendAsync(block, "yield", args, function(){ });
       }, 1);
@@ -682,16 +682,16 @@ Ruby.defineClass("Thread", {
 Ruby.defineClass("Time", {
   "instanceMethods": {
     
-    "initialize" : function(receiver, args) {
-      receiver.instanceVars.date = new Date(); 
+    "initialize" : function(self, args) {
+      self.instanceVars.date = new Date(); 
     },
     
-    "to_s" : function(receiver) {
-      return receiver.instanceVars.date.toString();
+    "to_s" : function(self) {
+      return self.instanceVars.date.toString();
     },
     
-    "to_f" : function(receiver) {
-      return receiver.instanceVars.date.getTime() / 1000;
+    "to_f" : function(self) {
+      return self.instanceVars.date.getTime() / 1000;
     }
     
   }
@@ -700,7 +700,7 @@ Ruby.defineClass("Time", {
 Ruby.defineClass("IO", {
   "instanceMethods": {
     
-    "write" : function(receiver, args) {
+    "write" : function(self, args) {
       // For now, only supports console output.
       Ruby.printDebug(args[0].value);
     }
@@ -724,7 +724,7 @@ Ruby.defineClass("ReturnException", {
 Ruby.defineClass("CGI", {
   "classMethods": {
     
-    "escapeHTML": function(receiver, args) {
+    "escapeHTML": function(self, args) {
       return args[0].value.
         replace(/&/, "&amp;").
         replace(/</, "&lt;").
@@ -740,31 +740,31 @@ Ruby.defineClass("JSON", {
   },
   "classMethods": {
     
-    "parse": function(receiver, args) {
+    "parse": function(self, args) {
       var obj = eval("(" + args[0].value + ")");
       function convert(obj) {
         if (obj === null || typeof(obj) == "boolean" || typeof(obj) == "number") {
           return obj;
         } else if (typeof(obj) == "string") {
-          return Ruby.toRubyString(obj);
+          return Ruby.newRubyString(obj);
         } else if (typeof(obj) == "object" && obj instanceof Array) {
           var ary = new Array(obj.length);
           for (var i = 0; i < obj.length; ++i) {
             ary[i] = convert(obj[i]);
           }
-          return Ruby.toRubyArray(ary);
+          return Ruby.newRubyArray(ary);
         } else {
           var ary = [];
           for (var k in obj) {
             ary.push(convert(k), convert(obj[k]));
           }
-          return Ruby.toRubyHash(ary);
+          return Ruby.newRubyHash(ary);
         }
       }
       return convert(obj);
     },
     
-    "unparse": function(receiver, args) {
+    "unparse": function(self, args) {
       function convert(obj) {
         if (obj === null) {
           return "null";
@@ -799,7 +799,7 @@ Ruby.defineClass("JS", {
   },
   "classMethods": {
     
-    "http_request": asyncFunc(function(receiver, args, block, callback) {
+    "http_request": asyncFunc(function(self, args, block, callback) {
       var method = args[0];
       var url = args[1];
       var data = args[2];
@@ -829,18 +829,18 @@ Ruby.defineClass("JS", {
       );
     }),
     
-    "debug": function(receiver, args) {
+    "debug": function(self, args) {
       return Ruby.vm.debug;
     },
     
-    "debug=": function(receiver, args) {
+    "debug=": function(self, args) {
       Ruby.vm.debug = args[0];
     }
     
   }
 });
 
-Ruby.Object.constants["RUBY_PLATFORM"] = Ruby.toRubyString("javascript-hotruby");
+Ruby.Object.constants["RUBY_PLATFORM"] = Ruby.newRubyString("javascript-hotruby");
 
 // Defines builtin classes written in Ruby.
 Ruby.vm.compileAndRun("builtin", function(res, ex) {

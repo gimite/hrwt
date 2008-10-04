@@ -115,7 +115,7 @@ var Ruby = {
    * Convert ruby object to native value
    * @param v ruby object
    */
-  rubyObjectToNative: function(v) {
+  toNative: function(v) {
     if(typeof(v) != "object") 
       return v;
     if(v.rubyClass == Ruby.Proc) {
@@ -127,7 +127,7 @@ var Ruby = {
           proc.parentStackFrame.classObj, 
           proc.parentStackFrame.methodName, 
           proc.parentStackFrame.self, 
-          Ruby.nativeAryToRubyObjectAry(arguments),
+          Ruby.arrayNativeToRuby(arguments),
           null,
           proc.parentStackFrame,
           true,
@@ -152,10 +152,10 @@ var Ruby = {
    * Convert array of ruby object to array of native object
    * @param {Array} ary Array of ruby object
    */
-  rubyObjectAryToNativeAry: function(ary) {
+  arrayRubyToNative: function(ary) {
     var convAry = new Array(ary.length);
     for(var i=0; i<ary.length; i++) {
-      convAry[i] = Ruby.rubyObjectToNative(ary[i]);
+      convAry[i] = Ruby.toNative(ary[i]);
     }
     return convAry;
   },
@@ -164,7 +164,7 @@ var Ruby = {
    * Convert native object to ruby object
    * @param v native object
    */
-  nativeToRubyObject: function(v) {
+  toRuby: function(v) {
     if (typeof(v) == "undefined") {
       return null;
     }
@@ -175,14 +175,14 @@ var Ruby = {
       return v;
     }
     if (typeof(v) == "string") {
-      return Ruby.toRubyString(v);
+      return Ruby.newRubyString(v);
     }
     if (typeof(v) == "object" && v instanceof Array) {
       var ary = new Array(v.length);
       for (var i = 0; i < v.length; ++i) {
-        ary[i] = Ruby.nativeToRubyObject(v[i]);
+        ary[i] = Ruby.toRuby(v[i]);
       }
-      return Ruby.toRubyArray(ary);
+      return Ruby.newRubyArray(ary);
     }
     var obj = new RubyObject(Ruby.NativeObject);
     obj.value = v;
@@ -193,10 +193,10 @@ var Ruby = {
    * Convert array of native object to array of ruby object
    * @param {Array} ary Array of native object
    */
-  nativeAryToRubyObjectAry: function(ary) {
+  arrayNativeToRuby: function(ary) {
     var convAry = new Array(ary.length);
     for(var i=0; i<ary.length; i++) {
-      convAry[i] = Ruby.nativeToRubyObject(ary[i]);
+      convAry[i] = Ruby.toRuby(ary[i]);
     }
     return convAry;
   },
@@ -206,7 +206,7 @@ var Ruby = {
    * @param {String} str
    * @return {String}
    */
-  toRubyString : function(str) {
+  newRubyString : function(str) {
     var obj = new RubyObject(Ruby.String);
     obj.value = str;
     return obj;
@@ -218,7 +218,7 @@ var Ruby = {
    * @param {RubyVM.StackFrame} sf
    * @return {Object} Proc
    */
-  toRubyProc : function(opcode, sf) {
+  newRubyProc : function(opcode, sf) {
     var obj = new RubyObject(Ruby.Proc);
     obj.opcode = opcode;
     obj.parentStackFrame = sf;
@@ -230,7 +230,7 @@ var Ruby = {
    * @param {Array} ary
    * @return {RubyObject}
    */
-  toRubyArray : function(ary) {
+  newRubyArray : function(ary) {
     var tuple = new RubyObject(Ruby.Tuple);
     tuple.value = ary;
     var obj = new RubyObject(Ruby.Array);
@@ -247,7 +247,7 @@ var Ruby = {
    * @param {Array} ary
    * @return {Object}
    */
-  toRubyHash : function(ary) {
+  newRubyHash : function(ary) {
     var hash = new RubyObject(Ruby.Hash);
     Ruby.sendSync(hash, "initialize", []);
     for (var i = 0;i < ary.length; i += 2) {
@@ -262,7 +262,7 @@ var Ruby = {
    * @param {Number} first
    * @param {boolean} exclude_end
    */
-  toRubyRange : function(first, last, exclude_end) {
+  newRubyRange : function(first, last, exclude_end) {
     var obj = new RubyObject(Ruby.Range);
     obj.instanceVars = {
       "@begin": first,
@@ -274,7 +274,7 @@ var Ruby = {
   
   intern: function(str) {
     // TODO: should be Symbol instead of String
-    return Ruby.toRubyString(str);
+    return Ruby.newRubyString(str);
   },
   
   toBoolean: function(val) {
