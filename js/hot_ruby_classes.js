@@ -10,9 +10,11 @@ Ruby.Object = Ruby.defineClass("Object", {
       return Ruby.getClass(self);
     },
     
-    "method_missing": function(self, args) {
-      Ruby.fatal("Undefined method `" + args[0].value + "' for " + Ruby.getClass(self).name);
-    },
+    "method_missing": asyncFunc(function(self, args, block, callback) {
+      return Ruby.raise(Ruby.NoMethodError,
+        "undefined method `" + args[0].value + "' for " + Ruby.getClass(self).name,
+        callback);
+    }),
     
     "equal?" : function(self, args) {
       return self == args[0];  
@@ -76,55 +78,6 @@ Ruby.Object = Ruby.defineClass("Object", {
     "inspect": function(self) {
       return "#<" + Ruby.getClass(self).name + ":????>";
     },
-    
-    // Global functions
-    
-    /*
-    "puts" : function(self, args) {
-      if(args.length == 0) {
-        Ruby.printDebug("");
-        return;
-      }
-      for(var i=0; i<args.length; i++) {
-        var obj = args[i];
-        if(obj == null) {
-          Ruby.printDebug("nil");
-          continue;
-        }
-        if(typeof(obj) == "number") {
-          Ruby.printDebug(obj);
-          continue;
-        }
-        if(obj.rubyClass == Ruby.String) {
-          Ruby.printDebug(obj.value);
-          continue;
-        }
-        if(obj.rubyClass == Ruby.Array) {
-          for(var j=0; j<obj.value.length; j++) {
-            Ruby.printDebug(obj.value[j]);
-          }
-          continue;
-        }
-        
-        Ruby.fatal("Unsupported object");
-      }
-    },
-    
-    "p" : asyncFunc(function(self, args, block, callback) {
-      if (args.length == 1) {
-        Ruby.sendAsync(args[0], "inspect", function(res, ex) {
-          Ruby.printDebug(res.value);
-          callback();
-        });
-      } else {
-        Ruby.fatal("Argument error");
-      }
-    }),
-    
-    "require": function(self, args) {
-      // Not implemented
-    },
-    */
     
     // JS only functions
     
@@ -822,21 +775,23 @@ Ruby.defineClass("JS", {
         }
         data = ary.join("&");
       }
-      new Ajax.Request(
-        url,
-        {
-          method: method,
-          parameters: data,
-          onSuccess: function(response) {
-            callback(response.responseText);
-          },
-          onFailure: function(response) {
-            // TODO: use Ruby exception
-            Ruby.fatal("http_get failed");
-            //callback(null);
+      try {
+        new Ajax.Request(
+          url,
+          {
+            method: method,
+            parameters: data,
+            onSuccess: function(response) {
+              callback(response.responseText);
+            },
+            onFailure: function(response) {
+              Ruby.raise(Ruby.RuntimeError, "http_get failed", callback);
+            }
           }
-        }
-      );
+        );
+      } catch (ex) {
+        Ruby.raise(Ruby.RuntimeError, "http_get failed", callback);
+      }
     }),
     
     "debug": function(self, args) {

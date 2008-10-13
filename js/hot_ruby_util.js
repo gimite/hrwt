@@ -322,6 +322,13 @@ var Ruby = {
     Ruby.vm.globalVars[name] = value;
   },
   
+  raise: function(classObj, message, callback) {
+    var ex = new RubyObject(classObj);
+    Ruby.setInstanceVar(ex, "@message", Ruby.toRuby(message));
+    Ruby.setInstanceVar(ex, "@backtrace", Ruby.newRubyArray());
+    callback(null, ex);
+  },
+  
   // Async version of for (; cond(); increment()) { body(); }
   loopAsync: function(cond, increment, body, callback) {
     var deferred = false;

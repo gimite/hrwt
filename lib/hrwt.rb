@@ -31,7 +31,7 @@ module HRWT
   module_function
 
     def compile(src)
-      return [compile_to_array(src, "src")].to_json()
+      return [compile_to_array(src, "(src)")].to_json()
     end
     
     def builtin_iseqs

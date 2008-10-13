@@ -190,10 +190,6 @@ RubyVM.prototype = {
     sf.block = block;
     sf.catchTable = opcode[10];
     
-    var prevSF = me.latestStackFrame;
-    me.latestStackFrame = sf;
-    if(me.topSF == null) me.topSF = sf;
-    
     var minArgc, labels, restIndex, blockIndex;
     if (typeof(opcode[9]) == "number") {
       minArgc = opcode[9];
@@ -207,8 +203,11 @@ RubyVM.prototype = {
       blockIndex = opcode[9][5];
     }
     var maxArgc = minArgc + labels.length - 1;
-    if (args.length < minArgc || (args.length > maxArgc && restIndex == -1))
-      Ruby.fatal("[runOpcode] Wrong number of arguments (" + args.length + " for " + minArgc + ")");
+    if (args.length < minArgc || (args.length > maxArgc && restIndex == -1)) {
+      return Ruby.raise(Ruby.ArgumentError,
+        "wrong number of arguments (" + args.length + " for " + minArgc + ")",
+        callback);
+    }
     // Copy args to localVars. Fill from last.
     var normalArgc = Math.min(args.length, maxArgc);
     for (var i = 0; i < normalArgc; i++) {
@@ -221,6 +220,10 @@ RubyVM.prototype = {
       sf.localVars[sf.localVars.length - 1 - blockIndex] = block;
     }
     var startLabel = labels[normalArgc - minArgc];
+    
+    var prevSF = me.latestStackFrame;
+    me.latestStackFrame = sf;
+    if(me.topSF == null) me.topSF = sf;
     
     // Run the mainLoop
     me.mainLoop(opcode[11], sf, startLabel, function(res, ex) {
@@ -437,7 +440,9 @@ RubyVM.prototype = {
               break;
             case "getconstant" :
               var value = me.getConstant(sf, sf.stack[--sf.sp], cmd[1]);
-              if (typeof(value) == "undefined") Ruby.fatal("[getConstant] Cannot find constant: " + cmd[1]);
+              if (typeof(value) == "undefined") {
+                return Ruby.raise(Ruby.NameError, "uninitialized constant " + cmd[1], bodyCallback);
+              }
               sf.stack[sf.sp++] = value;
               break;
             case "setinstancevariable" :
@@ -459,7 +464,9 @@ RubyVM.prototype = {
                 }
                 searchClass = searchClass.superClass;
                 if (searchClass == null) {
-                  Ruby.fatal("Cannot find class variable : " + cmd[1]);
+                  return Ruby.raise(Ruby.NameError,
+                    "uninitialized class variable " + cmd[1] + " in " + sf.classObj.name,
+                    bodyCallback);
                 }
               }
               break;
@@ -537,7 +544,9 @@ RubyVM.prototype = {
               var args = sf.stack.slice(sf.sp - cmd[1], sf.sp);
               sf.sp -= cmd[1];
               var localSF = me.getLocalStackFrame(sf);
-              if (!localSF.block) Ruby.fatal("no block given");
+              if (!localSF.block) {
+                return Ruby.raise(Ruby.LocalJumpError, "no block given (yield)", bodyCallback);
+              }
               me.invokeMethodAndPush(
                 localSF.block, "yield", args, null, sf, cmd[2], false, null, bodyCallback);
               return;
@@ -574,7 +583,9 @@ RubyVM.prototype = {
                   });
                 }
                 // Run the class definition
-                me.runOpcode(cmd[2], newClass, null, newClass, [], null, sf, false, bodyCallback);
+                me.runOpcode(
+                  cmd[2], newClass, "<class:" + newClass.name + ">", newClass,
+                  [], null, sf, false, bodyCallback);
                 return;
               } else if(cmd[3] == 1) {
                 // Object-Specific Classes
