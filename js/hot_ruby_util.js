@@ -242,6 +242,7 @@ var Ruby = {
    * @return {RubyObject}
    */
   newRubyArray : function(ary) {
+    ary = ary || [];
     var tuple = new RubyObject(Ruby.Tuple);
     tuple.value = ary;
     var obj = new RubyObject(Ruby.Array);
@@ -353,6 +354,7 @@ var Ruby = {
     switch(Ruby.vm.env) {
       case "browser":
         var out = Ruby.vm.debugDom;
+        str = str.replace(/ /g, "\u00a0"); // " " -> "&nbsp;"
         str.split(/(\n)/).each(function(piece) {
           var node = piece == "\n" ? document.createElement("br") : document.createTextNode(piece);
           out.appendChild(node);

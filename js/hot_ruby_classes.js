@@ -148,6 +148,11 @@ Ruby.Object = Ruby.defineClass("Object", {
       });
     }),
     
+    "__write__" : function(self, args) {
+      // For Kernel.__print_exception__
+      Ruby.printDebug(args[0].value);
+    },
+    
     "jp": function(self, args) {
       console.log(args[0]);
     }
@@ -662,6 +667,12 @@ Ruby.defineClass("Tuple", {
         self.value[sp] = other.value[op];
         ++sp;
       }
+    },
+    
+    "shifted" : function(self, args) {
+      var res = new RubyObject(Ruby.Tuple);
+      res.value = new Array(args[0]).concat(self.value);
+      return res;
     }
     
   }

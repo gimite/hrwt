@@ -159,12 +159,7 @@ RubyVM.prototype = {
     * @param {Array} opcode
    */
   run : function(opcode, callback) {
-    this.runOpcode(opcode, Ruby.Object, null, this.topObject, [], null, null, false,
-      function(res, ex) {
-        if (ex) alert("Exception: " + ex);
-        if (callback) callback();
-      }
-    );
+    this.runOpcode(opcode, Ruby.Object, "<main>", this.topObject, [], null, null, false, callback);
   },
   
   /**
@@ -649,6 +644,16 @@ RubyVM.prototype = {
     //console.log(["handleException", ex, catchIndex]);
     var me = this;
     var deferred = false;
+    if (catchIndex == 0) {
+      var trace = Ruby.getInstanceVar(ex, "@backtrace");
+      if (trace) {
+        var line = sf.fileName + ":" + sf.lineNo + ":in `" + sf.methodName + "'";
+        Ruby.sendSync(trace, "push", [Ruby.newRubyString(line)]);
+      } else {
+        trace = Ruby.newRubyArray();
+        Ruby.setInstanceVar(ex, "@backtrace", trace);
+      }
+    }
     sf.localVars[1] = ex; // $!
       // TODO: Looks like it is not always 1.
     for (var i = catchIndex; !deferred && i < sf.catchTable.length; ++i) {
@@ -1123,6 +1128,7 @@ RubyVM.prototype = {
         me.run(opcodes[i], function(res, ex) {
           if (ex) {
             console.error("Error: ", ex);
+            Ruby.sendSync(Ruby.Kernel, "__print_exception__", [ex]);
             if (callback) callback(null, ex);
           } else {
             bodyCallback();

@@ -122,6 +122,13 @@ module Kernel
       # Unimplemented
     end
     
+    def self.__print_exception__(ex)
+      __write__("#{ex.class.name}: #{ex.message}\n")
+      for line in ex.backtrace
+        __write__("        from #{line}\n")
+      end
+    end
+    
 end
 
 
