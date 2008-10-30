@@ -223,6 +223,15 @@ var Ruby = {
     return obj;
   },
   
+  newRubyRegexp : function(source, options) {
+    var obj = new RubyObject(Ruby.Regexp);
+    obj.instanceVars = {
+      "@source": source,
+      "@options": options
+    };
+    return obj;
+  },
+  
   /**
    * opcode -> Ruby Proc
    * @param {Array} opcode

@@ -39,24 +39,41 @@ module HRWT
     end
     
     def compile_to_array(src, file_name)
-      inst = VM::InstructionSequence.compile(src, file_name, 1, OutputCompileOption).to_a()
-      return convert_objects(inst) # TODO: write seriously
+      iseq = VM::InstructionSequence.compile(src, file_name, 1, OutputCompileOption).to_a()
+      return convert_iseq(iseq) # TODO: write seriously
     end
     
-    def convert_objects(obj)
+    def convert_iseq(obj)
       if obj.is_a?(Array)
         if obj[0] == :putobject
-          case obj[1]
-            when Symbol
-              obj[1] = {"type" => "symbol", "value" => obj[1].to_s()}
-            when Module
-              obj[1] = {"type" => "constant", "name" => obj[1].name}
-          end
+          obj[1] = serialize_object(obj[1])
         else
-          obj.each(){ |e| convert_objects(e) }
+          obj.each(){ |e| convert_iseq(e) }
         end
       end
       return obj
+    end
+    
+    def serialize_object(obj)
+      case obj
+        when NilClass, TrueClass, FalseClass, Integer, Float, String
+          return obj
+        when Regexp
+          return {"type" => "regexp", "source" => obj.source, "options" => obj.options}
+        when Symbol
+          return {"type" => "symbol", "value" => obj.to_s()}
+        when Range
+          return {
+            "type" => "range",
+            "begin" => serialize_object(obj.begin),
+            "end" => serialize_object(obj.end),
+            "exclude_end" => obj.exclude_end?,
+          }
+        when Module
+          return {"type" => "constant", "name" => obj.name}
+        else
+          raise("Unexpected type of object: %p" % obj)
+      end
     end
     
     def run_on_console(src, debug = false)

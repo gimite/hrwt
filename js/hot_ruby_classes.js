@@ -69,10 +69,7 @@ Ruby.Object = Ruby.defineClass("Object", {
     }),
     
     "to_s" : function(self) {
-      if(typeof(self) == "number")
-        return self.toString();
-      else
-        return self.value.toString();
+      return "#<" + Ruby.getClass(self).name + ":????>";
     },
     
     "inspect": function(self) {
@@ -488,6 +485,10 @@ Ruby.defineClass("Fixnum", {
       );
     }),
     
+    "to_s" : function(self) {
+      return self.toString();
+    },
+    
     "inspect" : function(self) {
       return self.toString();
     }
@@ -573,6 +574,11 @@ Ruby.defineClass("String", {
     "inspect" : function(self) {
       return '"' + self.value + '"';
     }
+  }
+});
+
+Ruby.defineClass("Regexp", {
+  "instanceMethods": {
   }
 });
 

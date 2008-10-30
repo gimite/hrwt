@@ -330,31 +330,8 @@ RubyVM.prototype = {
               sf.stack[sf.sp++] = sf.self;
               break;
             case "putobject" :
-              var value = cmd[1];
-              if (typeof(value) == "string") {
-                if (value.match(/^(\d+)\.\.(\d+)$/)) {
-                  value = Ruby.newRubyRange(
-                    parseInt(RegExp.$1), 
-                    parseInt(RegExp.$2), 
-                    false);
-                } else if(value.match(/^(\d+)\.\.\.(\d+)$/)) {
-                  value = Ruby.newRubyRange(
-                    parseInt(RegExp.$1), 
-                    parseInt(RegExp.$2), 
-                    true);
-                } else {
-                  value = Ruby.newRubyString(value);
-                }
-              } else if (typeof(value) == "object") {
-                if (value.type == "symbol") {
-                  value = Ruby.intern(value.value);
-                } else if (value.type == "constant") {
-                  value = me.getConstant(sf, null, value.name);
-                } else {
-                  Ruby.fatal("Unknown type for putobject: " + value.type);
-                }
-              }
-              sf.stack[sf.sp++] = value;
+              var node = cmd[1];
+              sf.stack[sf.sp++] = me.deserializeObject(node, sf);
               break;
             case "putstring" :
               sf.stack[sf.sp++] = Ruby.newRubyString(cmd[1]);
@@ -651,6 +628,26 @@ RubyVM.prototype = {
     );
   },
   
+  deserializeObject: function(node, sf) {
+    if (typeof(node) == "object") {
+      if (node.type == "symbol") {
+        return Ruby.intern(node.value);
+      } else if (node.type == "regexp") {
+        return Ruby.newRubyRegexp(node.source, node.options);
+      } else if (node.type == "range") {
+        return Ruby.newRubyRange(node.begin, node.end, node.exclude_end);
+      } else if (node.type == "constant") {
+        return this.getConstant(sf, null, node.name);
+      } else {
+        Ruby.fatal("Unknown type for putobject: " + node.type);
+      }
+    } else if (typeof(node) == "string") {
+      return Ruby.newRubyString(node);
+    } else {
+      return node;
+    }
+  },
+  
   handleException: function(opcode, sf, ip, ex, catchIndex, callback) {
     //console.log(["handleException", ex, catchIndex]);
     var me = this;
@@ -681,7 +678,7 @@ RubyVM.prototype = {
             function(res, ex) {
               if (me.debug) console.log(["catch table <- ", nextIndex - 1, ex]);
               if (ex) {
-                me.handleException(opcode, sf, ip, ex, nextIndex);
+                me.handleException(opcode, sf, ip, ex, nextIndex, callback);
               } else {
                 me.mainLoop(opcode, sf, contLabel, callback);
               }

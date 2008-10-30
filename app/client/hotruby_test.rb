@@ -7,6 +7,10 @@ assert_equal("hoge".class, String, "string literal 2")
 assert_equal(true.class, TrueClass, "true literal")
 assert_equal(false.class, FalseClass, "false literal")
 assert_equal(nil.class, NilClass, "nil literal")
+assert_equal((2..-1).class, Range, "range literal 1")
+assert_equal((2..-1).begin, 2, "range literal 2")
+assert_equal((2..-1).end, -1, "range literal 3")
+assert_equal((2..-1).exclude_end?, false, "range literal 4")
 foo = "FOO"
 assert_equal("hoge#{foo}bar", "hogeFOObar", "embedded expression")
 
