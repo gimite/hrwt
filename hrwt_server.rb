@@ -29,6 +29,7 @@ server = WEBrick::HTTPServer.new(
   :MimeTypes => WEBrick::HTTPUtils.load_mime_types("config/mime.types")
 )
 server.mount("/js", WEBrick::HTTPServlet::FileHandler, "./js")
+server.mount("/images", WEBrick::HTTPServlet::FileHandler, "./app/images")
 
 Dir["app/server/*.rb"].each() do |path|
   load(path)

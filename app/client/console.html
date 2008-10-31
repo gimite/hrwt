@@ -9,18 +9,25 @@
   <script type="text/javascript">
     
     function run(debug) {
+      Element.show("loading");
       var src = document.getElementById("srcArea").value;
       Ruby.vm.debug = debug;
-      Ruby.vm.compileAndRun({src: src});
+      Ruby.vm.compileAndRun({src: src}, function() {
+        Element.hide("loading");
+      });
     }
     
     function runFile(file, debug) {
+      Element.show("loading");
       Ruby.vm.debug = debug;
-      Ruby.vm.compileAndRun({url: "iseq/" + file});
+      Ruby.vm.compileAndRun({url: "iseq/" + file}, function() {
+        Element.hide("loading");
+      });
     }
     
     function init() {
       Ruby.vm.debugDom = document.getElementById("debug");
+      Element.hide("loading");
     }
     
   </script>
@@ -57,6 +64,7 @@ end
         <input type="button" onclick="javascript:run(true)" value="Run (dbg)">
         <input type="button" onclick="javascript:runFile('hotruby_test', false)" value="Run tests">
         <input type="button" onclick="javascript:runFile('hotruby_test', true)" value="Run tests (dbg)">
+        <img id="loading" src="images/ajax-loader.gif">
       </td>
       <td width="50%" valign="top">
         
