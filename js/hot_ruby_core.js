@@ -203,7 +203,7 @@ RubyVM.prototype = {
       blockIndex = opcode[9][5];
     }
     var maxArgc = minArgc + labels.length - 1;
-    if (args.length < minArgc || (args.length > maxArgc && restIndex == -1)) {
+    if (!isProc && (args.length < minArgc || (args.length > maxArgc && restIndex == -1))) {
       return Ruby.raise(Ruby.ArgumentError,
         "wrong number of arguments (" + args.length + " for " + minArgc + ")",
         callback);
@@ -635,7 +635,8 @@ RubyVM.prototype = {
       } else if (node.type == "regexp") {
         return Ruby.newRubyRegexp(node.source, node.options);
       } else if (node.type == "range") {
-        return Ruby.newRubyRange(node.begin, node.end, node.exclude_end);
+        return Ruby.newRubyRange(
+          this.deserializeObject(node.begin), this.deserializeObject(node.end), node.exclude_end);
       } else if (node.type == "constant") {
         return this.getConstant(sf, null, node.name);
       } else {
