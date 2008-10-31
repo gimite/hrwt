@@ -25,6 +25,8 @@ class Object
     
     include(Kernel)
     
+    alias_method(:send, :__send__)
+    
 end
 
 

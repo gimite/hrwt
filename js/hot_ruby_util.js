@@ -338,6 +338,10 @@ var Ruby = {
     callback(null, ex);
   },
   
+  blockGiven: function() {
+    return Ruby.vm.getLocalStackFrame(Ruby.vm.latestStackFrame).block != null;
+  },
+  
   // Async version of for (; cond(); increment()) { body(); }
   loopAsync: function(cond, increment, body, callback) {
     var deferred = false;

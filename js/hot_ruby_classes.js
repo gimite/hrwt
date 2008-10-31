@@ -76,6 +76,10 @@ Ruby.Object = Ruby.defineClass("Object", {
       return "#<" + Ruby.getClass(self).name + ":????>";
     },
     
+    "tainted?": function(self) {
+      return false; // unimplemented
+    },
+    
     // JS only functions
     
     "assert": function(self, args) {
@@ -224,7 +228,7 @@ Ruby.defineModule("Kernel", {
     }),
     
     "__block_given__": function(self) {
-      return Ruby.vm.latestStackFrame.block != null;
+      return Ruby.blockGiven();
     },
     
     "__raise__": asyncFunc(function(self, args, block, callback) {
