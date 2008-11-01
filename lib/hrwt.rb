@@ -14,12 +14,14 @@ module HRWT
 
     REQUIRED_PATHS = [
       "lib/hrwt/bootstrap.rb",
+      "(bootstrap_dynamic)",
       "lib/core/exception.rb",
       "lib/core/kernel.rb",
       "lib/core/misc.rb",
       "lib/core/integer.rb",
       "lib/core/enumerable.rb",
       "lib/core/comparable.rb",
+      "lib/core/encoding.rb",
       "lib/core/string.rb",
       "lib/core/tuple.rb",
       "lib/core/range.rb",
@@ -37,7 +39,11 @@ module HRWT
     end
     
     def builtin_iseqs
-      return REQUIRED_PATHS.map(){ |s| compile_to_array(File.read(s), s) }.to_json()
+      iseq_arys = REQUIRED_PATHS.map() do |path|
+        src = path == "(bootstrap_dynamic)" ? bootstrap_dynamic_source : File.read(path)
+        compile_to_array(src, path)
+      end
+      return iseq_arys.to_json()
     end
     
     def compile_to_array(src, file_name)
@@ -76,6 +82,10 @@ module HRWT
         else
           raise("Unexpected type of object: %p" % obj)
       end
+    end
+    
+    def bootstrap_dynamic_source
+      return "RUBY_VERSION = \"#{RUBY_VERSION}\"; RUBY_REVISION = #{RUBY_REVISION}"
     end
     
     def run_on_console(src, debug = false)

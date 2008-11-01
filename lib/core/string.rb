@@ -2699,6 +2699,19 @@ class String
 
     elements
   end
+  
+  def encoding
+    return Encoding::UTF_8
+  end
+  
+  def encode(enc)
+    # Nothing to do because only encoding is UTF-8.
+    return self
+  end
+  
+  def force_encoding(enc)
+    # Nothing to do because only encoding is UTF-8.
+  end
 
 =begin
 
