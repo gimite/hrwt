@@ -1,8 +1,12 @@
+# Copyright (c) 2007, Evan Phoenix
+# Distributed under New BSD License.
+# Copied from Rubinius http://rubini.us/ revision 1b300ca6... and modified.
+
 # depends on: class.rb
 
 class Exception
   
-  ivar_as_index :__ivars => 0, :message => 1, :context => 2
+  #ivar_as_index :__ivars => 0, :message => 1, :context => 2
   def message; @message ; end
 
   def initialize(message = nil)

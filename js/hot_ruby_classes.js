@@ -288,9 +288,15 @@ Ruby.defineClass("FalseClass", {
 
 Ruby.defineClass("NilClass", {
   "instanceMethods": {
+    
+    "nil?": function(self) {
+      return true;
+    },
+    
     "inspect" : function(self) {
       return "nil";
     }
+    
   },
 });
 
@@ -500,36 +506,23 @@ Ruby.defineClass("Fixnum", {
   }
 });
 
+// Not implemented
+Ruby.defineClass("Bignum", {
+  "superClass": Ruby.Integer
+});
+
 Ruby.defineClass("String", {
   "instanceMethods": {
-    "+" : function(self, args) {
-      if(typeof(args[0]) == "object")
-        return self.value + args[0].value;
-      else
-        return self.value + args[0];
+    
+    "length": function(self) {
+      return self.value.length;
     },
     
-    "<<": function(self, args) {
-      self.value += args[0].value;
+    "dup": function(self) {
+      return Ruby.newRubyString(self.value);
     },
     
-    "*" : function(self, args) {
-      var ary = new Array(args[0]);
-      for(var i=0; i<args[0]; i++) {
-        ary[i] = self.value;
-      }
-      return ary.join("");
-    },
-    
-    "==" : function(self, args) {
-      return self.value == args[0].value;
-    },
-    
-    "eql?" : function(self, args) {
-      return self.value == args[0].value;
-    },
-    
-    "hash" : function(self) {
+    "hash": function(self) {
       var hash = 0;
       for (var i = 0; i < self.value.length; ++i) {
         hash += self.value.charCodeAt(i);
@@ -537,50 +530,110 @@ Ruby.defineClass("String", {
       return hash;
     },
     
-    "[]" : function(self, args) {
-      if(args.length == 1 && typeof(args[0]) == "number") {
-        var no = args[0];
-        if(no < 0) 
-          no = self.value.length + no;
-        if(no < 0 || no >= self.value.length)
-          return null;
-        return self.value.charCodeAt(no);
-      } else if(args.length == 2 && typeof(args[0]) == "number" && typeof(args[1]) == "number") {
-        var start = args[0];
-        if(start < 0) 
-          start = self.value.length + start;
-        if(start < 0 || start >= self.value.length)
-          return null;
-        if(args[1] < 0 || start + args[1] > self.value.length)
-          return null;
-        return self.value.substr(start, args[1]);
+    "downcase!": function(self) {
+      self.value = self.value.toLowerCase();
+    },
+    
+    "upcase!": function(self) {
+      self.value = self.value.toUpperCase();
+    },
+    
+    "to_i": function(self, args) {
+      var base = args[0] == null ? 10 : args[0];
+      return parseInt(self.value, base);
+    },
+    
+    "to_f": function(self) {
+      return parseFloat(self.value);
+    },
+    
+    // Methods used internally in lib/core/string.rb
+    
+    "__at__": function(self, args) {
+      return Ruby.newRubyString(self.value[args[0]]);
+    },
+    
+    "__set__": function(self, args) {
+      var pos = args[0];
+      var chr = args[1];
+      self.value = self.value.substr(0, pos) + chr.value + self.value.substr(pos + 1);
+    },
+    
+    "__compare__": function(self, args) {
+      if (self.value > args[0].value) {
+        return 1;
+      } else if (self.value < args[0].value) {
+        return -1;
       } else {
-        Ruby.fatal("Unsupported String[]");
+        return 0;
       }
     },
     
-    "length": function(self) {
-      return self.value.length;
+    "__replace__": function(self, args) {
+      var other = args[0];
+      var pos = args[1] || 0;
+      var len = args[2] == null ? other.value.length : args[2];
+      self.value = other.value.substr(pos, len);
     },
     
-    "empty?": function(self) {
-      return self.value.length == 0;
+    "substring": function(self, args) {
+      var pos = args[0];
+      var len = args[1];
+      return Ruby.newRubyString(self.value.substr(pos, len));
     },
     
-    "dup": function(self) {
-      return Ruby.newRubyString(self.value);
+    "copy_from": function(self, args) {
+      var other = args[0];
+      var other_pos = args[1];
+      var len = args[2];
+      var self_pos = args[3];
+      self.value =
+        self.value.substr(0, self_pos) +
+        other.value.substr(other_pos, len) +
+        self.value.substr(self_pos + len);
     },
     
-    "to_s": function(self) {
-      return self;
+    "append": function(self, args) {
+      self.value += args[0].value;
     },
-
-    "inspect" : function(self) {
-      return '"' + self.value + '"';
+    
+    "isspace": function(self) {
+      return self.value.match(/^\s*$/) != null;
+    },
+    
+    "islower": function(self) {
+      return self.value.match(/^[a-z]*$/) != null;
+    },
+    
+    "isupper": function(self) {
+      return self.value.match(/^[A-Z]*$/) != null;
     }
+    
+  },
+  "classMethods": {
+    
+    // Methods used internally in lib/core/string.rb
+    
+    "template": function(self, args) {
+      var len = args[0];
+      var str = args[1];
+      var res = "";
+      for (var i = 0; i < len; i += str.value.length) {
+        res += str.value;
+      }
+      return Ruby.newRubyString(res.substr(0, len));
+    }
+    
   }
 });
 
+// TODO: implement it
+Ruby.defineClass("Symbol", {
+  "instanceMethods": {
+  }
+});
+
+// TODO: implement it
 Ruby.defineClass("Regexp", {
   "instanceMethods": {
   }

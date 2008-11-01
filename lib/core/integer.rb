@@ -1,3 +1,7 @@
+# Copyright (c) 2007, Evan Phoenix
+# Distributed under New BSD License.
+# Copied from Rubinius http://rubini.us/ revision 1b300ca6... and modified.
+
 # depends on: class.rb numeric.rb ctype.rb precision.rb
 
 class Integer < Numeric

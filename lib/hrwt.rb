@@ -14,15 +14,17 @@ module HRWT
 
     REQUIRED_PATHS = [
       "lib/hrwt/bootstrap.rb",
+      "lib/core/exception.rb",
       "lib/core/kernel.rb",
       "lib/core/misc.rb",
       "lib/core/integer.rb",
       "lib/core/enumerable.rb",
+      "lib/core/comparable.rb",
+      "lib/core/string.rb",
       "lib/core/tuple.rb",
       "lib/core/range.rb",
       "lib/core/array.rb",
       "lib/core/hash.rb",
-      "lib/core/exception.rb",
       "lib/hrwt/builtin.rb",
       "lib/hrwt/rpc_base.rb",
       "lib/hrwt/rpc_client.rb",

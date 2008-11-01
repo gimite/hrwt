@@ -1,3 +1,7 @@
+# Copyright (c) 2007, Evan Phoenix
+# Distributed under New BSD License.
+# Copied from Rubinius http://rubini.us/ revision 1b300ca6... and modified.
+
 # depends on: enumerable.rb misc.rb class.rb
 
 class Hash

@@ -27,7 +27,8 @@ var Ruby = {
     Ruby.vm.invokeMethod(receiver, name, args, block, 0, false, null, function(res, ex) {
       if (ex) {
         // TODO: throw instead
-        Ruby.fatal("Exception in sendSync: " + ex);
+        console.error("Exception in sendSync: ", ex);
+        Ruby.fatal("Exception in sendSync");
       } else {
         done = true;
         result = res;
@@ -332,7 +333,7 @@ var Ruby = {
   },
   
   raise: function(classObj, message, callback) {
-    var ex = new RubyObject(classObj);
+    var ex = new RubyObject(classObj || Ruby.Exception);
     Ruby.setInstanceVar(ex, "@message", Ruby.toRuby(message));
     Ruby.setInstanceVar(ex, "@backtrace", Ruby.newRubyArray());
     callback(null, ex);
