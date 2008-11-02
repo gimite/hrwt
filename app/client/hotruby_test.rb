@@ -287,6 +287,17 @@ end
 assert_equal(a, 1, "break 1")
 assert_equal(b, "foo", "break 2")
 
+for i in 0...3
+  a = i
+  begin
+    raise("hoge")
+  rescue
+    break
+  end
+end
+
+assert_equal(a, 0, "break 6")
+
 def br_bar()
   br_foo() do
     return "bar"

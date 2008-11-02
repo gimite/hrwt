@@ -55,6 +55,10 @@ Ruby.Object = Ruby.defineClass("Object", {
       Ruby.sendAsync(self, "==", args, block, callback);
     }),
     
+    "!": function(self) {
+      return false;
+    },
+    
     "respond_to?": function(self, args) {
       var methodName = args[0];
       return Ruby.vm.respondTo(self, methodName.value);
@@ -109,7 +113,11 @@ Ruby.Object = Ruby.defineClass("Object", {
     
     "jp": function(self, args) {
       console.log(args[0]);
-    }
+    },
+    
+    "__debug__": function(self, args) {
+      console.log(Ruby.vm.latestStackFrame);
+    },
     
   }
 });
@@ -264,6 +272,7 @@ Ruby.defineClass("TrueClass", {
 
 Ruby.defineClass("FalseClass", {
   "instanceMethods": {
+    
     "!" : function(self) {
       return true;
     },
@@ -283,6 +292,7 @@ Ruby.defineClass("FalseClass", {
     "to_s" : function(self) {
       return "false";
     }
+    
   }
 });
 
@@ -290,6 +300,10 @@ Ruby.defineClass("NilClass", {
   "instanceMethods": {
     
     "nil?": function(self) {
+      return true;
+    },
+    
+    "!": function(self) {
       return true;
     },
     
@@ -310,7 +324,7 @@ Ruby.defineClass("Proc", {
     "yield" : asyncFunc(function(self, args, block, callback) {
       Ruby.vm.runOpcode(
         self.opcode, 
-        self.parentStackFrame.classObj, 
+        self.parentStackFrame.invokeClass, 
         self.parentStackFrame.methodName, 
         self.parentStackFrame.self, 
         args, 
@@ -633,8 +647,39 @@ Ruby.defineClass("Symbol", {
   }
 });
 
-// TODO: implement it
 Ruby.defineClass("Regexp", {
+  "instanceMethods": {
+    
+    "search_region": function(self, args) {
+      var str = args[0];
+      var start = args[1];
+      var finish = args[2]; // ignored
+      var forward = args[3]; // ignored
+      self.exp.lastIndex = start;
+      var match = self.exp.exec(str.value);
+      if (!match) return null;
+      var res = new RubyObject(Ruby.MatchData);
+      res.instanceVars = {
+        "@source": str,
+        "@regexp": self,
+        "@full": Ruby.newRubyTuple([match.index, match.index + match[0].length]),
+        "@captures": Ruby.newRubyArray(
+          match.slice(1).map(function(s){ return Ruby.newRubyString(s); }))
+      }
+      return res;
+    }
+    
+  },
+  "classMethods": {
+    
+    "__regexp_new__": function(self, args) {
+      return Ruby.newRubyRegexp(args[0].value, args[1]);
+    }
+    
+  }
+});
+
+Ruby.defineClass("MatchData", {
   "instanceMethods": {
   }
 });

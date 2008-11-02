@@ -27,6 +27,7 @@ module HRWT
       "lib/core/range.rb",
       "lib/core/array.rb",
       "lib/core/hash.rb",
+      "lib/core/regexp.rb",
       "lib/hrwt/builtin.rb",
       "lib/hrwt/rpc_base.rb",
       "lib/hrwt/rpc_client.rb",

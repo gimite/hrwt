@@ -125,7 +125,7 @@ var Ruby = {
         var result;
         Ruby.vm.runOpcode(
           proc.opcode, 
-          proc.parentStackFrame.classObj, 
+          proc.parentStackFrame.invokeClass, 
           proc.parentStackFrame.methodName, 
           proc.parentStackFrame.self, 
           Ruby.arrayNativeToRuby(arguments),
@@ -225,12 +225,14 @@ var Ruby = {
   },
   
   newRubyRegexp : function(source, options) {
-    var obj = new RubyObject(Ruby.Regexp);
-    obj.instanceVars = {
-      "@source": source,
-      "@options": options
-    };
-    return obj;
+    var exp = new RubyObject(Ruby.Regexp);
+    exp.source = source;
+    exp.opts = options;
+    // Javascript "m" option allows "a\nb" matches /^b/, which is default in Ruby.
+    var flags = "mg";
+    if (exp.opts & Ruby.Regexp.constants.IGNORECASE) flags += "i";
+    exp.exp = new RegExp(source, flags);
+    return exp;
   },
   
   /**
@@ -244,6 +246,13 @@ var Ruby = {
     obj.opcode = opcode;
     obj.parentStackFrame = sf;
     return obj;
+  },
+  
+  newRubyTuple : function(ary) {
+    ary = ary || [];
+    var tuple = new RubyObject(Ruby.Tuple);
+    tuple.value = ary;
+    return tuple;
   },
   
   /**

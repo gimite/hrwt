@@ -43,13 +43,13 @@ var RubyModule = function(className, params) {
     });
   }
   if (this.type != "singleton" && className && Ruby.Object) {
-    var upperModule = params.upperModule || Ruby.Object;
-    upperModule.constants[className] = this;
-    if (upperModule == Ruby.Object) {
+    this.upperModule = params.upperModule || Ruby.Object;
+    this.upperModule.constants[className] = this;
+    if (this.upperModule == Ruby.Object) {
       this.name = className;
       if (!Ruby[className]) Ruby[className] = this;
     } else {
-      this.name = upperModule.name ? upperModule.name + "::" + className : null;
+      this.name = this.upperModule.name ? this.upperModule.name + "::" + className : null;
     }
   } else {
     this.name = className;
@@ -120,7 +120,7 @@ RubyVM.StackFrame = function() {
    * Current class to define methods
    * @type Object 
    */
-  this.classObj = null;
+  this.cbase = null;
   /** 
    * Current method name
    * @type String 
@@ -173,21 +173,23 @@ RubyVM.prototype = {
    * @param {boolean} isProc
    * @private
    */
-  runOpcode : function(opcode, classObj, methodName, self, args, block, parentSF, isProc, callback) {
+  runOpcode : function(opcode, invokeClass, methodName, self, args, block, parentSF, isProc, callback) {
     var me = this;
-    if (me.debug) console.log(["runOpcode", classObj, methodName, self, args, block]);
+    if (me.debug) console.log(["runOpcode", invokeClass, methodName, self, args, block]);
     
     // Create Stack Frame
     var sf = new RubyVM.StackFrame();
-    sf.localVars = opcode[7] == "rescue" ? parentSF.localVars : new Array(opcode[4].local_size + 1);
-    sf.stack = new Array(opcode[4].stack_max);
     sf.fileName = opcode[6];
-    sf.classObj = classObj;
+    sf.invokeClass = invokeClass;
     sf.methodName = methodName;
     sf.self = self;
     sf.parentStackFrame = parentSF;
     sf.isProc = isProc;
+    sf.isCatch = opcode[7] == "rescue";
     sf.block = block;
+    sf.localVars = sf.isCatch ? parentSF.localVars : new Array(opcode[4].local_size + 1);
+    sf.cbase = (sf.isProc || sf.isCatch) ? parentSF.cbase : (opcode.cbase || Ruby.Object);
+    sf.stack = new Array(opcode[4].stack_max);
     sf.catchTable = opcode[10];
     
     var minArgc, labels, restIndex, blockIndex;
@@ -430,10 +432,10 @@ RubyVM.prototype = {
               break;
             case "setclassvariable" :
               // TODO: consider inheritance
-              sf.classObj.classVars[cmd[1]] = sf.stack[--sf.sp];
+              sf.cbase.classVars[cmd[1]] = sf.stack[--sf.sp];
               break;
             case "getclassvariable" :
-              var searchClass = sf.classObj;
+              var searchClass = sf.cbase;
               while (true) {
                 if (cmd[1] in searchClass.classVars) {
                   sf.stack[sf.sp++] = searchClass.classVars[cmd[1]];
@@ -442,7 +444,7 @@ RubyVM.prototype = {
                 searchClass = searchClass.superClass;
                 if (searchClass == null) {
                   return Ruby.raise(Ruby.NameError,
-                    "uninitialized class variable " + cmd[1] + " in " + sf.classObj.name,
+                    "uninitialized class variable " + cmd[1] + " in " + sf.cbase.name,
                     bodyCallback);
                 }
               }
@@ -515,7 +517,7 @@ RubyVM.prototype = {
               if (block instanceof Array)
                 block = Ruby.newRubyProc(block, sf);
               me.invokeMethodAndPush(
-                sf.self, sf.methodName, args, block, sf, cmd[3], true, sf.classObj, bodyCallback);
+                sf.self, sf.methodName, args, block, sf, cmd[3], true, sf.invokeClass, bodyCallback);
               return;
             case "invokeblock" :
               var args = sf.stack.slice(sf.sp - cmd[1], sf.sp);
@@ -531,11 +533,12 @@ RubyVM.prototype = {
               var obj = sf.stack[--sf.sp];
               var classObj;
               if (obj == null) {
-                classObj = sf.classObj;
+                classObj = sf.cbase;
               } else {
                 classObj = Ruby.getSingletonClass(obj);
               }
               classObj.methods[cmd[1]] = cmd[2];
+              cmd[2].cbase = sf.cbase;
               if (classObj.scope == "module_function") {
                 Ruby.makeModuleFunction(classObj, cmd[1]);
               }
@@ -550,15 +553,16 @@ RubyVM.prototype = {
               var cbaseObj = sf.stack[--sf.sp];
               if(cmd[3] == 0 || cmd[3] == 2) {
                 // Search predefined class
-                var newClass = me.getConstant(sf, sf.classObj, cmd[1]);
+                var newClass = me.getConstant(sf, sf.cbase, cmd[1]);
                 if(typeof(newClass) == "undefined" || isRedefine) {
                   // Create class object
                   var newClass = new RubyModule(cmd[1], {
                     superClass: superClass,
-                    upperModule: sf.classObj,
+                    upperModule: sf.cbase,
                     type: cmd[3] == 0 ? "class" : "module"
                   });
                 }
+                cmd[2].cbase = newClass;
                 // Run the class definition
                 me.runOpcode(
                   cmd[2], newClass, "<class:" + newClass.name + ">", newClass,
@@ -569,6 +573,7 @@ RubyVM.prototype = {
                 if(cbaseObj == null || typeof(cbaseObj) != "object")
                   Ruby.fatal("Not supported Object-Specific Classes on Primitive Object");
                 var singletonClass = Ruby.getSingletonClass(cbaseObj);
+                cmd[2].cbase = singletonClass;
                 // Run the class definition
                 me.runOpcode(cmd[2], singletonClass, null, singletonClass, [], null, sf, false, bodyCallback);
                 return;
@@ -578,9 +583,13 @@ RubyVM.prototype = {
               me.endBlocks.push(cmd[1]);
               break;
             case "throw" :
+              // See: vm_insnhelper.c: vm_throw()
               var val = sf.stack[--sf.sp];
               var throwObj;
-              switch (cmd[1]) {
+              var state = cmd[1] & 0xff;
+              var flag = cmd[1] & 0x8000;
+              var level = cmd[1] >> 16;
+              switch (state) {
                 case 0:
                   throwObj = val;
                   break;
@@ -590,10 +599,12 @@ RubyVM.prototype = {
                   throwObj.targetStackFrame = me.getLocalStackFrame(sf);
                   break;
                 case 2:
-                  if (!sf.isProc) Ruby.fatal("unexpected break");
+                  var dsf = sf;
+                  while (dsf.isCatch) dsf = sf.parentStackFrame;
+                  if (!dsf.isProc) Ruby.fatal("unexpected break");
                   throwObj = new RubyObject(Ruby.BreakException);
                   throwObj.value = val;
-                  throwObj.targetStackFrame = sf.parentStackFrame;
+                  throwObj.targetStackFrame = dsf.parentStackFrame;
                   break;
                 default:
                   Ruby.fatal("Unknown throw state: " + cmd[1]);
@@ -675,7 +686,7 @@ RubyVM.prototype = {
         var nextIndex = i + 1;
         if (catchType == "rescue" && ip >= start && ip < end) {
           if (me.debug) console.log(["catch table -> ", nextIndex - 1, ex]);
-          me.runOpcode(catchOpcode, sf.classObj, sf.methodName, sf.self, [], null, sf, false,
+          me.runOpcode(catchOpcode, sf.invokeClass, sf.methodName, sf.self, [], null, sf, false,
             function(res, ex) {
               if (me.debug) console.log(["catch table <- ", nextIndex - 1, ex]);
               if (ex) {
@@ -754,6 +765,10 @@ RubyVM.prototype = {
     if (res) {
       callback(res.result);
       return;
+    }
+    
+    if (!receiverClass) {
+      return Ruby.raise(Ruby.ArgumentError, "self is not a Ruby object", callback);
     }
     
     var singletonClass = receiver != null ? receiver.singletonClass : null;
@@ -974,7 +989,7 @@ RubyVM.prototype = {
    */
   setConstant : function(sf, classObj, constName, constValue) {
     if (classObj == null) {
-      classObj = sf.classObj;
+      classObj = sf.cbase;
     } else if (classObj === false) {
       // TODO
       Ruby.fatal("[setConstant] Not implemented");
@@ -993,20 +1008,17 @@ RubyVM.prototype = {
   getConstant : function(sf, classObj, constName) {
     if (classObj == null) {
       var isFound = false;
-      // Search outer(parentStackFrame)
-      // TODO: this seems broken
-      for (var checkSF = sf;!isFound; checkSF = checkSF.parentStackFrame) {
-        if (checkSF == this.topSF || !checkSF) {
+      // Search cbase and its parents
+      for (classObj = sf.cbase; classObj; ) {
+        if (constName in classObj.constants) {
+          isFound = true;
           break;
         }
-        if (constName in checkSF.classObj.constants) {
-          classObj = checkSF.classObj;
-          isFound = true;
-        }
+        classObj = classObj.upperModule;
       }
-      // Search parent class
+      // Search super classes
       if (!isFound) {
-        for (classObj = sf.classObj; classObj && classObj != Ruby.Object; ) {
+        for (classObj = sf.invokeClass; classObj && classObj != Ruby.Object; ) {
           if (constName in classObj.constants) {
             isFound = true;
             break;
@@ -1014,21 +1026,17 @@ RubyVM.prototype = {
           classObj = classObj.superClass;
         }
       }
-      // Search in Object class
-      if (!isFound) {
-        classObj = Ruby.Object;
-      }
-    } else if (classObj === false) {
-      // TODO
-      Ruby.fatal("[setConstant] Not implemented");
     }
-    if (!classObj)
-      Ruby.fatal("[getConstant] Cannot find constant : " + constName);
-    return classObj.constants[constName];
+    if (classObj && constName in classObj.constants) {
+      var res = classObj.constants[constName];
+      return res == null ? null : res; // Converts undefined to null
+    } else {
+      return; // Returns undefined
+    }
   },
   
   getLocalStackFrame: function(sf) {
-    while (sf.isProc) {
+    while (sf.isProc || sf.isCatch) {
       sf = sf.parentStackFrame;
     }
     return sf;
