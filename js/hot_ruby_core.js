@@ -142,10 +142,17 @@ RubyVM.StackFrame = function() {
    */
   this.self = null;
   /** 
-   * Parent StackFrame
+   * StackFrame of scope enclosing this.
+   * Valid for block and catch frame. null for others.
    * @type RubyVM.StackFrame 
    */
   this.parentStackFrame = null;
+  /** 
+   * StackFrame which has invoked this.
+   * null if it has invoked from native (JavaScript) method.
+   * @type RubyVM.StackFrame 
+   */
+  this.callerStackFrame = null;
   /** 
    * Is Proc(Block)
    * @type boolean 
@@ -159,7 +166,8 @@ RubyVM.prototype = {
     * @param {Array} opcode
    */
   run : function(opcode, callback) {
-    this.runOpcode(opcode, Ruby.Object, "<main>", this.topObject, [], null, null, false, callback);
+    this.runOpcode(
+      opcode, Ruby.Object, "<main>", this.topObject, [], null, null, null, false, callback);
   },
   
   /**
@@ -173,7 +181,8 @@ RubyVM.prototype = {
    * @param {boolean} isProc
    * @private
    */
-  runOpcode : function(opcode, invokeClass, methodName, self, args, block, parentSF, isProc, callback) {
+  runOpcode : function(
+      opcode, invokeClass, methodName, self, args, block, parentSF, callerSF, isProc, callback) {
     var me = this;
     if (me.debug) console.log(["runOpcode", invokeClass, methodName, self, args, block]);
     
@@ -184,6 +193,7 @@ RubyVM.prototype = {
     sf.methodName = methodName;
     sf.self = self;
     sf.parentStackFrame = parentSF;
+    sf.callerStackFrame = callerSF;
     sf.isProc = isProc;
     sf.isCatch = opcode[7] == "rescue";
     sf.block = block;
@@ -412,7 +422,14 @@ RubyVM.prototype = {
               me.globalVars[cmd[1]] = sf.stack[--sf.sp];
               break;
             case "getglobal" :
-              sf.stack[sf.sp++] = me.globalVars[cmd[1]];
+              var val;
+              if (cmd[1] == "$~") {
+                var lsf = me.getLocalStackFrame(sf);
+                val = lsf.data && lsf.data.last_match;
+              } else {
+                val = me.globalVars[cmd[1]];
+              }
+              sf.stack[sf.sp++] = val;
               break;
             case "setconstant" :
               me.setConstant(sf, sf.stack[--sf.sp], cmd[1], sf.stack[--sf.sp]);
@@ -463,8 +480,26 @@ RubyVM.prototype = {
               }
               lookupSF.localVars[cmd[1]] = sf.stack[--sf.sp];
               break;
-    //        case "getspecial" :
-    //          break;
+            case "getspecial" :
+              var idx = cmd[1];
+              var type = cmd[2];
+              if (idx == 1 && (type == 77|| (type >= 2 && type <= 18 && type % 2 == 0))) {
+                  // $&, $1, ...
+                var lsf = me.getLocalStackFrame(sf);
+                var lastMatch = lsf.data && lsf.data.last_match;
+                var val;
+                if (lastMatch) {
+                  var n = (type == 77) ? 0 : type / 2;
+                  val = Ruby.sendSync(lastMatch, "[]", [n]);
+                } else {
+                  val = null;
+                }
+                sf.stack[sf.sp++] = val;
+              } else {
+                Ruby.raise(Ruby.NotImplementedError,
+                  "getspecial " + idx + "," + type + " not implemented", bodyCallback);
+              }
+              break;
     //        case "setspecial" :
     //          break;
             case "pop" :
@@ -566,7 +601,7 @@ RubyVM.prototype = {
                 // Run the class definition
                 me.runOpcode(
                   cmd[2], newClass, "<class:" + newClass.name + ">", newClass,
-                  [], null, sf, false, bodyCallback);
+                  [], null, sf, sf, false, bodyCallback);
                 return;
               } else if(cmd[3] == 1) {
                 // Object-Specific Classes
@@ -575,7 +610,8 @@ RubyVM.prototype = {
                 var singletonClass = Ruby.getSingletonClass(cbaseObj);
                 cmd[2].cbase = singletonClass;
                 // Run the class definition
-                me.runOpcode(cmd[2], singletonClass, null, singletonClass, [], null, sf, false, bodyCallback);
+                me.runOpcode(
+                  cmd[2], singletonClass, null, singletonClass, [], null, sf, sf, false, bodyCallback);
                 return;
               }
               break;
@@ -686,7 +722,7 @@ RubyVM.prototype = {
         var nextIndex = i + 1;
         if (catchType == "rescue" && ip >= start && ip < end) {
           if (me.debug) console.log(["catch table -> ", nextIndex - 1, ex]);
-          me.runOpcode(catchOpcode, sf.invokeClass, sf.methodName, sf.self, [], null, sf, false,
+          me.runOpcode(catchOpcode, sf.invokeClass, sf.methodName, sf.self, [], null, sf, sf, false,
             function(res, ex) {
               if (me.debug) console.log(["catch table <- ", nextIndex - 1, ex]);
               if (ex) {
@@ -714,7 +750,7 @@ RubyVM.prototype = {
   invokeMethodAndPush: function(
         receiver, methodName, args, block, sf, type, invokeSuper, classObj, callback) {
     this.invokeMethod(
-          receiver, methodName, args, block, type, invokeSuper, classObj, function(res, ex) {
+          receiver, methodName, args, block, sf, type, invokeSuper, classObj, function(res, ex) {
       if (ex) {
         if (Ruby.getClass(ex) == Ruby.BreakException && ex.targetStackFrame == sf) {
           res = ex.value;
@@ -740,7 +776,8 @@ RubyVM.prototype = {
    * @param {boolean} invokeSuper
    * @param {function} callback
    */
-  invokeMethod : function(receiver, methodName, args, block, type, invokeSuper, classObj, callback) {
+  invokeMethod : function(
+        receiver, methodName, args, block, sf, type, invokeSuper, classObj, callback) {
     var me = this;
     var receiverClass = Ruby.getClass(receiver);
     var invokeClass = receiverClass;
@@ -787,7 +824,7 @@ RubyVM.prototype = {
       if (methodName != "method_missing") {
         var newArgs = [Ruby.intern(methodName)].concat(args);
         me.invokeMethod(
-          receiver, "method_missing", newArgs, block, type, false, null, callback);
+          receiver, "method_missing", newArgs, block, sf, type, false, null, callback);
         return;
       } else {
         Ruby.fatal("This must not happen");
@@ -819,7 +856,7 @@ RubyVM.prototype = {
         break;
       case "object" :
         me.runOpcode(func, invokeClass,
-            invokeMethodName, receiver, args, block, null, false, callback);
+            invokeMethodName, receiver, args, block, null, sf, false, callback);
         return;
       default :
         Ruby.fatal("[invokeMethod] Unknown function type : " + typeof(func));

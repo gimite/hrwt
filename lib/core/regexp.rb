@@ -118,27 +118,20 @@ class Regexp
   end
 
   def self.last_match(field = nil)
-    # TODO: enable this when it's possible
-    raise(NotImplementedError, "Regexp.last_match is not implemented")
-=begin
-    match = MethodContext.current.sender.last_match
+    match = MethodContext.current.sender[:last_match]
     if match
       return match if field.nil?
       return match[field]
     else
       return nil
     end
-=end
   end
 
   def self.last_match=(match)
     # Set an ivar in the sender of our sender
-    # TODO: enable this when it's possible
-=begin
     parent = MethodContext.current.sender
     ctx = parent.sender
-    ctx.last_match = match
-=end
+    ctx[:last_match] = match
   end
 
   ##
@@ -147,11 +140,8 @@ class Regexp
 
   def self.my_last_match=(match)
     # Set an ivar in the sender
-    # TODO: enable this when it's possible
-=begin
     ctx = MethodContext.current.sender
-    ctx.last_match = match
-=end
+    ctx[:last_match] = match
   end
 
   def self.union(*patterns)

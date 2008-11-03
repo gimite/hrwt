@@ -330,6 +330,7 @@ Ruby.defineClass("Proc", {
         args, 
         block,
         self.parentStackFrame,
+        null,
         true,
         function(res, ex) {
           if (ex) return callback(null, ex);
@@ -341,7 +342,19 @@ Ruby.defineClass("Proc", {
     
     "call": asyncFunc(function(self, args, block, callback) {
       Ruby.sendAsync(self, "yield", args, block, callback);
-    })
+    }),
+    
+    // Rubinius-specific methods
+    
+    "block": function(self) {
+      return self;
+    },
+    
+    "home": function(self) {
+      var ctx = new RubyObject(Ruby.MethodContext);
+      ctx.stackFrame = Ruby.vm.getLocalStackFrame(self.parentStackFrame);
+      return ctx;
+    }
     
   }
 });
@@ -783,13 +796,56 @@ Ruby.defineClass("IO", {
 Ruby.defineClass("Exception", {
 });
 
+// Internally used
 Ruby.defineClass("BreakException", {
   "instanceMethods": {
   }
 });
 
+// Internally used
 Ruby.defineClass("ReturnException", {
   "instanceMethods": {
+  }
+});
+
+// Rubinius-specific class
+Ruby.defineClass("MethodContext", {
+  "instanceMethods": {
+    
+    "sender": function(self) {
+      var callerSF = self.stackFrame.callerStackFrame;
+      if (callerSF) {
+        var ctx = new RubyObject(Ruby.MethodContext);
+        ctx.stackFrame = Ruby.vm.getLocalStackFrame(callerSF);
+        return ctx;
+      } else {
+        return null;
+      }
+    },
+    
+    "[]": function(self, args) {
+      if (!self.stackFrame.data) return null;
+      return self.stackFrame.data[args[0].value];
+    },
+    
+    "[]=": function(self, args) {
+      if (!self.stackFrame.data) self.stackFrame.data = {};
+      self.stackFrame.data[args[0].value] = args[1];
+    },
+    
+    "inspect": function(self) {
+      return "#<MethodContext:" + self.stackFrame.methodName + ">";
+    },
+    
+  },
+  "classMethods": {
+    
+    "current": function(self) {
+      var ctx = new RubyObject(Ruby.MethodContext);
+      ctx.stackFrame = Ruby.vm.getLocalStackFrame(Ruby.vm.latestStackFrame);
+      return ctx;
+    },
+    
   }
 });
 

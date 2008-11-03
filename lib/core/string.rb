@@ -797,8 +797,7 @@ class String
       else
         # We do this so that we always manipulate $~ in the context
         # of the passed block.
-        # TODO: enable this when it's possible
-        #prc.block.home.last_match = match
+        prc.block.home[:last_match] = match
 
         val = yield(match[0].dup)
         tainted ||= val.tainted?

@@ -18,13 +18,13 @@ var Ruby = {
       }
     }
     //console.log(receiver, name, args, block, callback);
-    Ruby.vm.invokeMethod(receiver, name, args, block, 0, false, null, callback);
+    Ruby.vm.invokeMethod(receiver, name, args, block, null, 0, false, null, callback);
   },
   
   sendSync: function(receiver, name, args, block) {
     var done = false;
     var result;
-    Ruby.vm.invokeMethod(receiver, name, args, block, 0, false, null, function(res, ex) {
+    Ruby.vm.invokeMethod(receiver, name, args, block, null, 0, false, null, function(res, ex) {
       if (ex) {
         // TODO: throw instead
         console.error("Exception in sendSync: ", ex);
@@ -131,6 +131,7 @@ var Ruby = {
           Ruby.arrayNativeToRuby(arguments),
           null,
           proc.parentStackFrame,
+          null,
           true,
           function(res, ex) {
             if (ex) throw ex;
