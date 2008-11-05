@@ -215,6 +215,14 @@ RubyVM.prototype = {
       blockIndex = opcode[9][5];
     }
     var maxArgc = minArgc + labels.length - 1;
+    if (isProc && args.length == 1 && Ruby.kindOf(args[0], Ruby.Array) && minArgc > 1) {
+      // Splat array args
+      var ary = args.pop();
+      var size = Ruby.arraySize(ary);
+      for (var i = 0; i < size; ++i) {
+        args.push(Ruby.arrayAt(ary, i));
+      }
+    }
     if (!isProc && (args.length < minArgc || (args.length > maxArgc && restIndex == -1))) {
       return Ruby.raise(Ruby.ArgumentError,
         "wrong number of arguments (" + args.length + " for " + minArgc + ")",
@@ -426,6 +434,9 @@ RubyVM.prototype = {
               if (cmd[1] == "$~") {
                 var lsf = me.getLocalStackFrame(sf);
                 val = lsf.data && lsf.data.last_match;
+              } else if (cmd[1] == "$_") {
+                var lsf = me.getLocalStackFrame(sf);
+                val = lsf.data && lsf.data.last_read_line;
               } else {
                 val = me.globalVars[cmd[1]];
               }

@@ -85,6 +85,13 @@ var Ruby = {
     }
   },
   
+  kindOf: function(obj, classObj) {
+    var res = Ruby.eachAncestor(Ruby.getClass(obj), function(c) {
+      if (c == classObj) return true;
+    });
+    return res || false;
+  },
+  
   defineClass: function(className, params) {
     params.type = "class";
     return new RubyModule(className, params);

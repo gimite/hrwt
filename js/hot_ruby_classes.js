@@ -36,15 +36,7 @@ Ruby.Object = Ruby.defineClass("Object", {
     }),
     
     "is_a?": function(self, args) {
-      var classObj = Ruby.getClass(self);
-      while (classObj) {
-        if (classObj == args[0]) return true;
-        for (var i = 0; i < classObj.included.length; ++i) {
-          if (classObj.included[i] == args[0]) return true;
-        }
-        classObj = classObj.superClass;
-      }
-      return false;
+      return Ruby.kindOf(self, args[0]);
     },
     
     "kind_of?": asyncFunc(function(self, args, block, callback) {
