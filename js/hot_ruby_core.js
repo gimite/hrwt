@@ -1008,7 +1008,7 @@ RubyContext.prototype = {
     var me = this;
     var res;
     switch(receiverClass) {
-      case me.NativeEnviornment:
+      case me.NativeEnvironment:
         res = me.getNativeEnvVar(receiver, methodName, args);
         break;
       case me.NativeObject:
@@ -1028,7 +1028,7 @@ RubyContext.prototype = {
   },
   
   /**
-   * Get variable from NativeEnviornment
+   * Get variable from NativeEnvironment
    */
   getNativeEnvVar: function(receiver, varName, args) {
     var me = this;

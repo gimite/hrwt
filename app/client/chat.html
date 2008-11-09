@@ -9,8 +9,9 @@
   <script type="text/javascript">
     
     function init() {
-      // Ruby.vm.debug = true;
-      Ruby.vm.compileAndRun({url: "iseq/chat_client"});
+      var vm = new RubyVM();
+      // vm.debug = true;
+      vm.compileAndRun({url: "iseq/chat_client"});
     }
     
   </script>
