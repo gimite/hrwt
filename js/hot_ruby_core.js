@@ -49,7 +49,9 @@ var RubyModule = function(ctx, className, params) {
     this.upperModule.constants[className] = this;
     if (this.upperModule == ctx.Object) {
       this.name = className;
-      if (!this.vm.Context.prototype[className]) this.vm.Context.prototype[className] = this;
+      // Adds it to prototype of context object so that we can access Ruby class Hoge by
+      // ctx.Hoge for convenience.
+      this.vm.Context.prototype[className] = this;
     } else {
       this.name = this.upperModule.name ? this.upperModule.name + "::" + className : null;
     }
@@ -1360,19 +1362,36 @@ RubyContext.prototype = {
   
   defineClass: function(className, params) {
     var me = this;
+    params = params || {};
     params.type = "class";
     return new RubyModule(me, className, params);
   },
   
   defineModule: function(className, params) {
     var me = this;
+    params = params || {};
     params.type = "module";
     return new RubyModule(me, className, params);
   },
   
-  defineMethod: function(classObj, name, func) {
+  defineMethod: function(classObj, name, options, func) {
     var me = this;
+    if (!func) {
+      func = options;
+      options = {};
+    }
+    func.async = options.async;
     classObj.methods[name] = func;
+  },
+  
+  defineSingletonMethod: function(obj, name, options, func) {
+    var me = this;
+    me.defineMethod(me.getSingletonClass(obj), name, options, func);
+  },
+  
+  defineClassMethod: function(classObj, name, options, func) {
+    var me = this;
+    me.defineSingletonMethod(classObj, name, options, func);
   },
   
   makeModuleFunction: function(classObj, name) {
