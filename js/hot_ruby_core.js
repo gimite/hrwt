@@ -14,10 +14,10 @@ if (!this.console) {
   }
 }
 
-var RubyObject = function(ctx, classObj) {
-  if (!classObj) ctx.fatal("classObj is missing");
+var RubyObject = function(ctx, klass) {
+  if (!klass) ctx.fatal("klass is missing");
   this.vm = ctx.vm;
-  this.rubyClass = classObj;
+  this.rubyClass = klass;
   this.instanceVars = {};
 };
 
@@ -27,9 +27,9 @@ RubyObject.prototype = {
   }
 };
 
-var RubyModule = function(ctx, className, params) {
+var RubyClass = function(ctx, className, params) {
   this.vm = ctx.vm;
-  this.type = params.type || "module";
+  this.type = params.type;
   this.rubyClass = this.type == "module" ? ctx.Module : ctx.Class;
   this.superClass = this.type == "module" ? null : (params.superClass || ctx.Object || null);
   this.methods = params.instanceMethods || {};
@@ -38,31 +38,31 @@ var RubyModule = function(ctx, className, params) {
   this.instanceVars = params.instanceVars || {};
   this.included = params.included || [];
   if (this.type != "singleton") {
-    this.singletonClass = new RubyModule(ctx, null, {
+    this.singletonClass = new RubyClass(ctx, null, {
       superClass: this.superClass ? this.superClass.singletonClass : this.rubyClass,
       type: "singleton",
       instanceMethods: params.classMethods || {}
     });
   }
   if (this.type != "singleton" && className && ctx.Object) {
-    this.upperModule = params.upperModule || ctx.Object;
-    this.upperModule.constants[className] = this;
-    if (this.upperModule == ctx.Object) {
+    this.upperClass = params.upperClass || ctx.Object;
+    this.upperClass.constants[className] = this;
+    if (this.upperClass == ctx.Object) {
       this.name = className;
       // Adds it to prototype of context object so that we can access Ruby class Hoge by
       // ctx.Hoge for convenience.
       this.vm.Context.prototype[className] = this;
     } else {
-      this.name = this.upperModule.name ? this.upperModule.name + "::" + className : null;
+      this.name = this.upperClass.name ? this.upperClass.name + "::" + className : null;
     }
   } else {
     this.name = className;
   }
 };
 
-RubyModule.prototype = {
+RubyClass.prototype = {
   toString: function() {
-    return "RubyModule:" + this.name;
+    return "RubyClass:" + this.name;
   }
 };
 
@@ -71,9 +71,11 @@ RubyModule.prototype = {
  * @class
  * @construtor
  */
-var RubyVM = function() {
+var RubyVM = function(params) {
   var me = this;
-  me.compilerUrl = "compile";
+  params = params || {};
+  me.compilerUrl = params.compilerUrl || "compile";
+  me.consoleElement = params.consoleElement;
   /** 
    * Global Variables
    * @type Object 
@@ -90,7 +92,7 @@ var RubyVM = function() {
    */
   me.env = "browser";
   me.topObject = null;
-  me.topSF = null;
+  me.topFrame = null;
   
   me.loaded = false;
   me.onLoaded = [];
@@ -142,15 +144,16 @@ RubyVM.prototype = {
    */
   compileAndRun : function(source, callback) {
     var me = this;
+    var ctx = new me.Context();
     var url;
     var params = {};
     if (source == "builtin") {
       url = "iseq/builtin";
     } else if (source.url) {
       url = source.url;
-    } else if (source.src) {
+    } else if (source.script) {
       url = me.compilerUrl;
-      params["src"] = source.src;
+      params["src"] = source.script;
     } else {
       throw "Unknown source";
     }
@@ -166,17 +169,19 @@ RubyVM.prototype = {
         parameters: paramAry.join("&"),
         onSuccess: function(response) {
           try {
-            if(response.responseText.length == 0) {
-              alert("Compile failed");
+            if (response.responseText.length == 0) {
+              ctx.printToConsole("Compiling error\n");
+              console.error("Compiling error");
+              callback();
             } else {
               var opcodes = eval("(" + response.responseText + ")");
               if (!me.loaded && source != "builtin") {
                 // Waits until builtin classes are loaded.
                 me.onLoaded.push(function() {
-                  me.runOpcodes(opcodes, callback);
+                  ctx.runOpcodes(opcodes, callback);
                 });
               } else {
-                me.runOpcodes(opcodes, callback);
+                ctx.runOpcodes(opcodes, callback);
               }
             }
           } catch (ex) {
@@ -184,7 +189,10 @@ RubyVM.prototype = {
           }
         },
         onFailure: function(response) {
-          alert("Compile failed");
+          var message = "Failed to access " + url;
+          ctx.printToConsole(message + "\n");
+          console.error(message);
+          callback();
         }
       }
     );
@@ -245,11 +253,6 @@ RubyContext.prototype = {
     return new me.vm.Context();
   },
   
-  newObject: function(klass) {
-    var me = this;
-    return new RubyObject(me, klass);
-  },
-  
   runOpcodes: function(opcodes, callback) {
     var me = this;
     var i = 0;
@@ -257,7 +260,12 @@ RubyContext.prototype = {
       function() { return i < opcodes.length; },
       function() { ++i; },
       function(bodyCallback) {
-        me.run(opcodes[i], function(res, ex) {
+        me.runOpcode({
+          opcode: opcodes[i],
+          invokeClass: me.Object,
+          methodName: "<main>",
+          self: me.vm.topObject
+        }, function(res, ex) {
           if (ex) {
             console.error("Error: ", ex);
             me.sendSync(me.Kernel, "__print_exception__", [ex]);
@@ -265,7 +273,7 @@ RubyContext.prototype = {
           } else {
             bodyCallback();
           }
-        })
+        });
       },
       function() {
         console.log("Done");
@@ -275,47 +283,48 @@ RubyContext.prototype = {
   },
   
   /**
-   * Run the script.
-    * @param {Array} opcode
-   */
-  run : function(opcode, callback) {
-    var me = this;
-    me.runOpcode(
-      opcode, me.Object, "<main>", me.vm.topObject, [], null, null, null, false, callback);
-  },
-  
-  /**
    * Run the opcode.
-   * @param {Array} opcode
-   * @param {Object} classObj
-   * @param {String} methodName
-   * @param {Object} self
-   * @param {Array} args
-   * @param {RubyVM.StackFrame} parentSF Parent StackFrame
-   * @param {boolean} isProc
+   * @param {Array} params.opcode
+   * @param {RubyObject} params.invokeClass
+   * @param {String} params.methodName
+   * @param {RubyObject} params.self
+   * @param {Array} params.args
+   * @param {RubyObject} params.block
+   * @param {RubyVM.Frame} params.parentFrame
+   * @param {boolean} params.isProc
+   * @param {function} callback
    * @private
    */
-  runOpcode : function(
-      opcode, invokeClass, methodName, self, args, block, parentSF, callerSF, isProc, callback) {
+  runOpcode : function(params, callback) {
     var me = this;
-    if (me.vm.debug) console.log(["runOpcode", invokeClass, methodName, self, args, block]);
+    //if (me.vm.debug) console.log("runOpcode", params);
     
     // Create Stack Frame
-    var sf = new RubyVM.StackFrame();
-    sf.fileName = opcode[6];
-    sf.invokeClass = invokeClass;
-    sf.methodName = methodName;
-    sf.self = self;
-    sf.parentStackFrame = parentSF;
-    sf.callerStackFrame = callerSF;
-    sf.isProc = isProc;
-    sf.isCatch = opcode[7] == "rescue";
-    sf.block = block;
-    sf.localVars = sf.isCatch ? parentSF.localVars : new Array(opcode[4].local_size + 1);
-    sf.cbase = (sf.isProc || sf.isCatch) ? parentSF.cbase : (opcode.cbase || me.Object);
-    sf.stack = new Array(opcode[4].stack_max);
-    sf.catchTable = opcode[10];
+    var opcode = params.opcode;
+    var frame = new RubyVM.Frame();
+    frame.fileName = opcode[6];
+    frame.invokeClass = params.invokeClass;
+    frame.methodName = params.methodName;
+    frame.self = params.self;
+    frame.parentFrame = params.parentFrame;
+    frame.senderFrame = me.currentFrame;
+    frame.isProc = params.isProc;
+    frame.isCatch = opcode[7] == "rescue";
+    frame.block = params.block;
+    if (frame.isCatch) {
+      frame.localVars = params.parentFrame.localVars;
+    } else {
+      frame.localVars = new Array(opcode[4].local_size + 1);
+    }
+    if (frame.isProc || frame.isCatch) {
+      frame.cbase = params.parentFrame.cbase;
+    } else {
+      frame.cbase = opcode.cbase || me.Object;
+    }
+    frame.stack = new Array(opcode[4].stack_max);
+    frame.catchTable = opcode[10];
     
+    var args = params.args ? params.args.concat([]) : [];
     var minArgc, labels, restIndex, blockIndex;
     if (typeof(opcode[9]) == "number") {
       minArgc = opcode[9];
@@ -329,7 +338,7 @@ RubyContext.prototype = {
       blockIndex = opcode[9][5];
     }
     var maxArgc = minArgc + labels.length - 1;
-    if (isProc && args.length == 1 && me.kindOf(args[0], me.Array) && minArgc > 1) {
+    if (params.isProc && args.length == 1 && me.kindOf(args[0], me.Array) && minArgc > 1) {
       // Splat array args
       var ary = args.pop();
       var size = me.arraySize(ary);
@@ -337,7 +346,7 @@ RubyContext.prototype = {
         args.push(me.arrayAt(ary, i));
       }
     }
-    if (!isProc && (args.length < minArgc || (args.length > maxArgc && restIndex == -1))) {
+    if (!params.isProc && (args.length < minArgc || (args.length > maxArgc && restIndex == -1))) {
       return me.raise(me.ArgumentError,
         "wrong number of arguments (" + args.length + " for " + minArgc + ")",
         callback);
@@ -345,39 +354,47 @@ RubyContext.prototype = {
     // Copy args to localVars. Fill from last.
     var normalArgc = Math.min(args.length, maxArgc);
     for (var i = 0; i < normalArgc; i++) {
-      sf.localVars[sf.localVars.length - 1 - i] = args[i];
+      frame.localVars[frame.localVars.length - 1 - i] = args[i];
     }
     if (restIndex != -1) {
-      sf.localVars[sf.localVars.length - 1 - restIndex] = me.newRubyArray(args.slice(normalArgc));
+      frame.localVars[frame.localVars.length - 1 - restIndex] =
+        me.newArray(args.slice(normalArgc));
     }
     if (blockIndex != -1) {
-      sf.localVars[sf.localVars.length - 1 - blockIndex] = block;
+      frame.localVars[frame.localVars.length - 1 - blockIndex] = params.block;
     }
     var startLabel = labels[normalArgc - minArgc];
     
-    var prevSF = me.latestStackFrame;
-    me.latestStackFrame = sf;
-    if(me.vm.topSF == null) me.vm.topSF = sf;
+    var prevFrame = me.currentFrame;
+    me.currentFrame = frame;
+    if (me.vm.topFrame == null) me.vm.topFrame = frame;
     
     // Run the mainLoop
-    me.mainLoop(opcode[11], sf, startLabel, function(res, ex) {
+    me.mainLoop(opcode[11], startLabel, function(res, ex) {
       
-      me.latestStackFrame = prevSF;
+      me.currentFrame = prevFrame;
       
       if (ex) return callback(null, ex);
       
       // Copy the stack to the parent stack frame
-      if (parentSF != null) {
-        for (var i = 0;i < sf.sp; i++) {
-          parentSF.stack[parentSF.sp++] = sf.stack[i];
+      if (params.parentFrame != null) {
+        for (var i = 0;i < frame.sp; i++) {
+          params.parentFrame.stack[params.parentFrame.sp++] = frame.stack[i];
         }
       }
-      if (sf == me.vm.topSF && me.vm.endBlocks.length > 0) {
-        // Run END blocks
-        me.run(me.vm.endBlocks.pop(), callback);
+      if (frame == me.vm.topFrame && me.vm.endBlocks.length > 0) {
+        // Runs END blocks.
+        // TODO: Make it Proc so that end block can access local variables of
+        //       the method it was specified.
+        me.runOpcode({
+          opcode: me.vm.endBlocks.pop(),
+          invokeClass: me.Object,
+          methodName: "<end block>",
+          self: me.vm.topObject
+        }, callback);
         return;
       }
-      if (callback) callback(sf.sp > 0 ? sf.stack[0] : null);
+      if (callback) callback(frame.sp > 0 ? frame.stack[0] : null);
       
     });
   },
@@ -385,14 +402,14 @@ RubyContext.prototype = {
   /**
    * Main loop for opcodes.
    * @param {Array} opcode
-   * @param {RubyVM.StackFrame} sf
+   * @param {RubyVM.Frame} frame
    * @private
    */
-  mainLoop : function(opcode, sf, startLabel, callback) {
-    //console.log(["mainLoop", callback]);
+  mainLoop : function(opcode, startLabel, callback) {
     var me = this;
+
     // Create label to ip
-    if(!("label2ip" in opcode)) {
+    if (!("label2ip" in opcode)) {
       opcode.label2ip = {};
       for (var ip = 0;ip < opcode.length; ip++) {
         // If "cmd is a String then it is a jump label
@@ -404,6 +421,7 @@ RubyContext.prototype = {
       }
     }
     
+    var frame = me.currentFrame;
     var ip = startLabel ? opcode.label2ip[startLabel] : 0;
     
     me.loopAsync(
@@ -413,44 +431,43 @@ RubyContext.prototype = {
       
       // Body of the loop
       function(bodyCallback) {
-        if (sf.sp < 0) me.fatal("sp is negative");
+        if (frame.sp < 0) me.fatal("sp is negative");
         // Get the next command
         var cmd = opcode[ip];
         
-        if (me.vm.debug) console.log(["ip", ip].concat(cmd));
+        // if (me.vm.debug) console.log(["ip", ip].concat(cmd));
         // If "cmd" is a Number then it is the line number.
-        if (typeof(cmd) == "number") sf.lineNo = cmd;
+        if (typeof(cmd) == "number") frame.lineNo = cmd;
         
         // "cmd" must be an Array
         if (cmd != null && typeof(cmd) != "number" && cmd instanceof Array) {
           
-          //trace("cmd = " + cmd[0] + ", sp = " + sf.sp);
           switch (cmd[0]) {
             case "jump" :
               ip = opcode.label2ip[cmd[1]];
               break;
             case "branchif" :
-              var val = sf.stack[--sf.sp];
-              if(me.toBoolean(val)) {
+              var val = frame.stack[--frame.sp];
+              if (me.toBoolean(val)) {
                 ip = opcode.label2ip[cmd[1]];
               }
               break;
             case "branchunless" :
-              var val = sf.stack[--sf.sp];
-              if(!me.toBoolean(val)) {
+              var val = frame.stack[--frame.sp];
+              if (!me.toBoolean(val)) {
                 ip = opcode.label2ip[cmd[1]];
               }
               break;
             case "opt_case_dispatch":
-              var v = sf.stack[--sf.sp];
-              if(typeof(v) != "number") v = v.value;
+              var v = frame.stack[--frame.sp];
+              if (typeof(v) != "number") v = v.value;
               for(var i=0; i<cmd[1].length; i+=2) {
-                if(v === cmd[1][i]) {
+                if (v === cmd[1][i]) {
                   ip = opcode.label2ip[cmd[1][i+1]];
                   break;
                 }
               }
-              if(i == cmd[1].length) {
+              if (i == cmd[1].length) {
                 ip = opcode.label2ip[cmd[2]];
               }
               break;
@@ -458,23 +475,23 @@ RubyContext.prototype = {
               ip = opcode.length;
               break;
             case "putnil" :
-              sf.stack[sf.sp++] = null;
+              frame.stack[frame.sp++] = null;
               break;
             case "putself" :
-              sf.stack[sf.sp++] = sf.self;
+              frame.stack[frame.sp++] = frame.self;
               break;
             case "putobject" :
               var node = cmd[1];
-              sf.stack[sf.sp++] = me.deserializeObject(node, sf);
+              frame.stack[frame.sp++] = me.deserializeObject(node);
               break;
             case "putstring" :
-              sf.stack[sf.sp++] = me.newRubyString(cmd[1]);
+              frame.stack[frame.sp++] = me.newString(cmd[1]);
               break;
             case "tostring" :
-              if (me.getClass(sf.stack[sf.sp - 1]) != me.String) {
-                me.sendAsync(sf.stack[sf.sp - 1], "to_s", [], null, function(res, ex) {
+              if (me.classOf(frame.stack[frame.sp - 1]) != me.String) {
+                me.sendAsync(frame.stack[frame.sp - 1], "to_s", [], null, function(res, ex) {
                   if (ex) return bodyCallback(null, ex);
-                  sf.stack[sf.sp - 1] = res;
+                  frame.stack[frame.sp - 1] = res;
                   bodyCallback();
                 });
                 return;
@@ -482,136 +499,139 @@ RubyContext.prototype = {
               break;
             case "concatstrings" :
               var str = "";
-              for (var i = sf.sp - cmd[1]; i < sf.sp; ++i) {
-                str += sf.stack[i].value;
+              for (var i = frame.sp - cmd[1]; i < frame.sp; ++i) {
+                str += frame.stack[i].value;
               }
-              sf.sp -= cmd[1];
-              sf.stack[sf.sp++] = me.newRubyString(str);
+              frame.sp -= cmd[1];
+              frame.stack[frame.sp++] = me.newString(str);
               break;
             case "newarray" :
-              var value = me.newRubyArray(sf.stack.slice(sf.sp - cmd[1], sf.sp));
-              sf.sp -= cmd[1];
-              sf.stack[sf.sp++] = value;
+              var value = me.newArray(frame.stack.slice(frame.sp - cmd[1], frame.sp));
+              frame.sp -= cmd[1];
+              frame.stack[frame.sp++] = value;
               break;
             case "duparray" :
-              sf.stack[sf.sp++] = me.newRubyArray(cmd[1]);
+              frame.stack[frame.sp++] = me.newArray(cmd[1]);
               break;
             case "expandarray" :
-              var obj = sf.stack[--sf.sp];
-              if(typeof(obj) == "object" && obj.rubyClass == me.Array) {
+              var obj = frame.stack[--frame.sp];
+              if (typeof(obj) == "object" && obj.rubyClass == me.Array) {
                 for(var i = cmd[1] - 1; i >= 0; i--) {
-                  sf.stack[sf.sp++] = me.arrayAt(obj, i);
+                  frame.stack[frame.sp++] = me.arrayAt(obj, i);
                 }
-                if(cmd[2] && 1) {
+                if (cmd[2] && 1) {
                   // TODO
                 }
-                if(cmd[2] && 2) {
+                if (cmd[2] && 2) {
                   // TODO
                 }
-                if(cmd[2] && 4) {
+                if (cmd[2] && 4) {
                   // TODO
                 }
               } else {
-                sf.stack[sf.sp++] = obj;
+                frame.stack[frame.sp++] = obj;
                 for (var i = 0;i < cmd[1] - 1; i++) {
-                  sf.stack[sf.sp++] = null;
+                  frame.stack[frame.sp++] = null;
                 }
               }
               break;
             case "splatarray" :
-              var obj = sf.stack[--sf.sp];
-              me.invokeMethodAndPush(
-                me.InstructionHelper, "splat_array", [obj], null, sf, 0, false, null, bodyCallback);
+              var obj = frame.stack[--frame.sp];
+              me.invokeMethodAndPush({
+                receiver: me.InstructionHelper,
+                methodName: "splat_array",
+                args: [obj]
+              }, bodyCallback);
               return;
             case "newhash" :
-              var hash = me.newRubyHash(sf.stack.slice(sf.sp - cmd[1], sf.sp));
-              sf.sp -= cmd[1];
-              sf.stack[sf.sp++] = hash;
+              var hash = me.newHash(frame.stack.slice(frame.sp - cmd[1], frame.sp));
+              frame.sp -= cmd[1];
+              frame.stack[frame.sp++] = hash;
               break;
             case "newrange" :
-              var last = sf.stack[--sf.sp];
-              var first = sf.stack[--sf.sp];
-              var value = me.newRubyRange(first, last, cmd[1]);
-              sf.stack[sf.sp++] = value;
+              var last = frame.stack[--frame.sp];
+              var first = frame.stack[--frame.sp];
+              var value = me.newRange(first, last, cmd[1]);
+              frame.stack[frame.sp++] = value;
               break;
             case "setlocal" :
-              me.getLocalStackFrame(sf).localVars[cmd[1]] = sf.stack[--sf.sp];
+              me.getLocalFrame(frame).localVars[cmd[1]] = frame.stack[--frame.sp];
               break;
             case "getlocal" :
-              sf.stack[sf.sp++] = me.getLocalStackFrame(sf).localVars[cmd[1]];
+              frame.stack[frame.sp++] = me.getLocalFrame(frame).localVars[cmd[1]];
               break;
             case "setglobal" :
-              me.vm.globalVars[cmd[1]] = sf.stack[--sf.sp];
+              me.vm.globalVars[cmd[1]] = frame.stack[--frame.sp];
               break;
             case "getglobal" :
               var val;
               if (cmd[1] == "$~") {
-                var lsf = me.getLocalStackFrame(sf);
-                val = lsf.data && lsf.data.last_match;
+                var lframe = me.getLocalFrame(frame);
+                val = lframe.data && lframe.data.last_match;
               } else if (cmd[1] == "$_") {
-                var lsf = me.getLocalStackFrame(sf);
-                val = lsf.data && lsf.data.last_read_line;
+                var lframe = me.getLocalFrame(frame);
+                val = lframe.data && lframe.data.last_read_line;
               } else {
                 val = me.vm.globalVars[cmd[1]];
               }
-              sf.stack[sf.sp++] = val;
+              frame.stack[frame.sp++] = val;
               break;
             case "setconstant" :
-              me.setConstant(sf, sf.stack[--sf.sp], cmd[1], sf.stack[--sf.sp]);
+              me.setConstant(frame.stack[--frame.sp], cmd[1], frame.stack[--frame.sp], frame);
               break;
             case "getconstant" :
-              var value = me.getConstant(sf, sf.stack[--sf.sp], cmd[1]);
+              var value = me.getConstant(frame.stack[--frame.sp], cmd[1], frame);
               if (typeof(value) == "undefined") {
                 return me.raise(me.NameError, "uninitialized constant " + cmd[1], bodyCallback);
               }
-              sf.stack[sf.sp++] = value;
+              frame.stack[frame.sp++] = value;
               break;
             case "setinstancevariable" :
-              sf.self.instanceVars[cmd[1]] = sf.stack[--sf.sp];
+              frame.self.instanceVars[cmd[1]] = frame.stack[--frame.sp];
               break;
             case "getinstancevariable" :
-              sf.stack[sf.sp++] = sf.self.instanceVars[cmd[1]];
+              frame.stack[frame.sp++] = frame.self.instanceVars[cmd[1]];
               break;
             case "setclassvariable" :
               // TODO: consider inheritance
-              sf.cbase.classVars[cmd[1]] = sf.stack[--sf.sp];
+              frame.cbase.classVars[cmd[1]] = frame.stack[--frame.sp];
               break;
             case "getclassvariable" :
-              var searchClass = sf.cbase;
+              var searchClass = frame.cbase;
               while (true) {
                 if (cmd[1] in searchClass.classVars) {
-                  sf.stack[sf.sp++] = searchClass.classVars[cmd[1]];
+                  frame.stack[frame.sp++] = searchClass.classVars[cmd[1]];
                   break;
                 }
                 searchClass = searchClass.superClass;
                 if (searchClass == null) {
                   return me.raise(me.NameError,
-                    "uninitialized class variable " + cmd[1] + " in " + sf.cbase.name,
+                    "uninitialized class variable " + cmd[1] + " in " + frame.cbase.name,
                     bodyCallback);
                 }
               }
               break;
             case "getdynamic" :
-              var lookupSF = sf;
+              var lookupFrame = frame;
               for (var i = 0;i < cmd[2]; i++) {
-                lookupSF = lookupSF.parentStackFrame;
+                lookupFrame = lookupFrame.parentFrame;
               }
-              sf.stack[sf.sp++] = lookupSF.localVars[cmd[1]];
+              frame.stack[frame.sp++] = lookupFrame.localVars[cmd[1]];
               break;
             case "setdynamic" :
-              var lookupSF = sf;
+              var lookupFrame = frame;
               for (var i = 0;i < cmd[2]; i++) {
-                lookupSF = lookupSF.parentStackFrame;
+                lookupFrame = lookupFrame.parentFrame;
               }
-              lookupSF.localVars[cmd[1]] = sf.stack[--sf.sp];
+              lookupFrame.localVars[cmd[1]] = frame.stack[--frame.sp];
               break;
             case "getspecial" :
               var idx = cmd[1];
               var type = cmd[2];
               if (idx == 1 && (type == 77|| (type >= 2 && type <= 18 && type % 2 == 0))) {
                   // $&, $1, ...
-                var lsf = me.getLocalStackFrame(sf);
-                var lastMatch = lsf.data && lsf.data.last_match;
+                var lframe = me.getLocalFrame(frame);
+                var lastMatch = lframe.data && lframe.data.last_match;
                 var val;
                 if (lastMatch) {
                   var n = (type == 77) ? 0 : type / 2;
@@ -619,124 +639,152 @@ RubyContext.prototype = {
                 } else {
                   val = null;
                 }
-                sf.stack[sf.sp++] = val;
+                frame.stack[frame.sp++] = val;
               } else {
-                me.raise(me.NotImplementedError,
+                return me.raise(me.NotImplementedError,
                   "getspecial " + idx + "," + type + " not implemented", bodyCallback);
               }
               break;
-    //        case "setspecial" :
-    //          break;
+            case "setspecial" :
+              return me.raise(me.NotImplementedError,
+                "setspecial not implemented", bodyCallback);
             case "pop" :
-              sf.sp--;
+              frame.sp--;
               break;
             case "dup" :
-              sf.stack[sf.sp] = sf.stack[sf.sp - 1];
-              sf.sp++;
+              frame.stack[frame.sp] = frame.stack[frame.sp - 1];
+              frame.sp++;
               break;
             case "dupn" :
               for (var i = 0;i < cmd[1]; i++) {
-                sf.stack[sf.sp + i] = sf.stack[sf.sp + i - cmd[1]];
+                frame.stack[frame.sp + i] = frame.stack[frame.sp + i - cmd[1]];
               }
-              sf.sp += cmd[1];
+              frame.sp += cmd[1];
               break;
             case "swap" :
-              var tmp = sf.stack[sf.sp - 1];
-              sf.stack[sf.sp - 1] = sf.stack[sf.sp - 2];
-              sf.stack[sf.sp - 2] = tmp;
+              var tmp = frame.stack[frame.sp - 1];
+              frame.stack[frame.sp - 1] = frame.stack[frame.sp - 2];
+              frame.stack[frame.sp - 2] = tmp;
               break;
             case "topn" :
-              sf.stack[sf.sp] = sf.stack[sf.sp - cmd[1] - 1];
-              sf.sp++;
+              frame.stack[frame.sp] = frame.stack[frame.sp - cmd[1] - 1];
+              frame.sp++;
               break;
             case "setn" :
-              sf.stack[sf.sp - cmd[1] - 1] = sf.stack[sf.sp - 1];
+              frame.stack[frame.sp - cmd[1] - 1] = frame.stack[frame.sp - 1];
               break;
             case "emptstack" :
-              sf.sp = 0;
+              frame.sp = 0;
               break;
             case "send" :
-              var block = (cmd[4] & RubyVM.VM_CALL_ARGS_BLOCKARG_BIT) ? sf.stack[--sf.sp] : cmd[3];
-              var args = sf.stack.slice(sf.sp - cmd[2], sf.sp);
-              sf.sp -= cmd[2];
-              var receiver = sf.stack[--sf.sp];
+              var block = (cmd[4] & RubyVM.VM_CALL_ARGS_BLOCKARG_BIT) ?
+                frame.stack[--frame.sp] : cmd[3];
+              var args = frame.stack.slice(frame.sp - cmd[2], frame.sp);
+              frame.sp -= cmd[2];
+              var receiver = frame.stack[--frame.sp];
               if (cmd[4] & RubyVM.VM_CALL_FCALL_BIT) {
-                receiver = sf.self;
+                receiver = frame.self;
               }
               if (block instanceof Array)
-                block = me.newRubyProc(block, sf);
-              me.invokeMethodAndPush(
-                receiver, cmd[1], args, block, sf, cmd[4], false, null, bodyCallback);
+                block = me.newProc(block, frame);
+              me.invokeMethodAndPush({
+                receiver: receiver,
+                methodName: cmd[1],
+                args: args,
+                block: block,
+                type: cmd[4]
+              }, bodyCallback);
               return;
             case "invokesuper" :
-              var block = (cmd[3] & RubyVM.VM_CALL_ARGS_BLOCKARG_BIT) ? sf.stack[--sf.sp] : cmd[2];
-              var args = sf.stack.slice(sf.sp - cmd[1], sf.sp);
-              sf.sp -= cmd[1];
+              var block = (cmd[3] & RubyVM.VM_CALL_ARGS_BLOCKARG_BIT) ?
+                frame.stack[--frame.sp] : cmd[2];
+              var args = frame.stack.slice(frame.sp - cmd[1], frame.sp);
+              frame.sp -= cmd[1];
               // TODO When to use this autoPassAllArgs?
-              var autoPassAllArgs = sf.stack[--sf.sp];
+              var autoPassAllArgs = frame.stack[--frame.sp];
               if (block instanceof Array)
-                block = me.newRubyProc(block, sf);
-              me.invokeMethodAndPush(
-                sf.self, sf.methodName, args, block, sf, cmd[3], true, sf.invokeClass, bodyCallback);
+                block = me.newProc(block, frame);
+              me.invokeMethodAndPush({
+                receiver: frame.self,
+                methodName: frame.methodName,
+                args: args,
+                block: block,
+                type: cmd[3],
+                super: true,
+                klass: frame.invokeClass
+              }, bodyCallback);
               return;
             case "invokeblock" :
-              var args = sf.stack.slice(sf.sp - cmd[1], sf.sp);
-              sf.sp -= cmd[1];
-              var localSF = me.getLocalStackFrame(sf);
-              if (!localSF.block) {
+              var args = frame.stack.slice(frame.sp - cmd[1], frame.sp);
+              frame.sp -= cmd[1];
+              var localFrame = me.getLocalFrame(frame);
+              if (!localFrame.block) {
                 return me.raise(me.LocalJumpError, "no block given (yield)", bodyCallback);
               }
-              me.invokeMethodAndPush(
-                localSF.block, "yield", args, null, sf, cmd[2], false, null, bodyCallback);
+              me.invokeMethodAndPush({
+                receiver: localFrame.block,
+                methodName: "yield",
+                args: args,
+                type: cmd[2]
+              }, bodyCallback);
               return;
             case "definemethod" :
-              var obj = sf.stack[--sf.sp];
-              var classObj;
+              var obj = frame.stack[--frame.sp];
+              var klass;
               if (obj == null) {
-                classObj = sf.cbase;
+                klass = frame.cbase;
               } else {
-                classObj = me.getSingletonClass(obj);
+                klass = me.getSingletonClass(obj);
               }
-              classObj.methods[cmd[1]] = cmd[2];
-              cmd[2].cbase = sf.cbase;
-              if (classObj.scope == "module_function") {
-                me.makeModuleFunction(classObj, cmd[1]);
+              klass.methods[cmd[1]] = cmd[2];
+              cmd[2].cbase = frame.cbase;
+              if (klass.scope == "module_function") {
+                me.makeModuleFunction(klass, cmd[1]);
               }
               opcode[ip] = null;
               opcode[ip - 1] = null;
               break;
             case "defineclass" :
-              var superClass = sf.stack[--sf.sp];
+              var superClass = frame.stack[--frame.sp];
               var isRedefine = superClass === false;
-              if(superClass == null)
+              if (superClass == null)
                 superClass = me.Object;
-              var cbaseObj = sf.stack[--sf.sp];
-              if(cmd[3] == 0 || cmd[3] == 2) {
+              var cbaseObj = frame.stack[--frame.sp];
+              if (cmd[3] == 0 || cmd[3] == 2) {
                 // Search predefined class
-                var newClass = me.getConstant(sf, sf.cbase, cmd[1]);
-                if(typeof(newClass) == "undefined" || isRedefine) {
+                var newClass = me.getConstant(frame.cbase, cmd[1]);
+                if (typeof(newClass) == "undefined" || isRedefine) {
                   // Create class object
-                  var newClass = new RubyModule(me, cmd[1], {
+                  var newClass = new RubyClass(me, cmd[1], {
                     superClass: superClass,
-                    upperModule: sf.cbase,
+                    upperClass: frame.cbase,
                     type: cmd[3] == 0 ? "class" : "module"
                   });
                 }
                 cmd[2].cbase = newClass;
                 // Run the class definition
-                me.runOpcode(
-                  cmd[2], newClass, "<class:" + newClass.name + ">", newClass,
-                  [], null, sf, sf, false, bodyCallback);
+                me.runOpcode({
+                  opcode: cmd[2],
+                  invokeClass: newClass,
+                  methodName: "<class:" + newClass.name + ">",
+                  self: newClass,
+                  parentFrame: frame
+                }, bodyCallback);
                 return;
-              } else if(cmd[3] == 1) {
+              } else if (cmd[3] == 1) {
                 // Object-Specific Classes
-                if(cbaseObj == null || typeof(cbaseObj) != "object")
+                if (cbaseObj == null || typeof(cbaseObj) != "object")
                   me.fatal("Not supported Object-Specific Classes on Primitive Object");
                 var singletonClass = me.getSingletonClass(cbaseObj);
                 cmd[2].cbase = singletonClass;
                 // Run the class definition
-                me.runOpcode(
-                  cmd[2], singletonClass, null, singletonClass, [], null, sf, sf, false, bodyCallback);
+                me.runOpcode({
+                  opcode: cmd[2],
+                  invokeClass: singletonClass,
+                  methodName: "<singleton class>",
+                  self: singletonClass,
+                  parentFrame: frame
+                }, bodyCallback);
                 return;
               }
               break;
@@ -745,7 +793,7 @@ RubyContext.prototype = {
               break;
             case "throw" :
               // See: vm_insnhelper.c: vm_throw()
-              var val = sf.stack[--sf.sp];
+              var val = frame.stack[--frame.sp];
               var throwObj;
               var state = cmd[1] & 0xff;
               var flag = cmd[1] & 0x8000;
@@ -757,15 +805,15 @@ RubyContext.prototype = {
                 case 1:
                   throwObj = me.newObject(me.ReturnException);
                   throwObj.value = val;
-                  throwObj.targetStackFrame = me.getLocalStackFrame(sf);
+                  throwObj.targetFrame = me.getLocalFrame(frame);
                   break;
                 case 2:
-                  var dsf = sf;
-                  while (dsf.isCatch) dsf = sf.parentStackFrame;
-                  if (!dsf.isProc) me.fatal("unexpected break");
+                  var dframe = frame;
+                  while (dframe.isCatch) dframe = frame.parentFrame;
+                  if (!dframe.isProc) me.fatal("unexpected break");
                   throwObj = me.newObject(me.BreakException);
                   throwObj.value = val;
-                  throwObj.targetStackFrame = dsf.parentStackFrame;
+                  throwObj.targetFrame = dframe.parentFrame;
                   break;
                 default:
                   me.fatal("Unknown throw state: " + cmd[1]);
@@ -779,7 +827,7 @@ RubyContext.prototype = {
               break;
             case "putcbase":
               // TODO: Not sure what it is. Pushes null for the meantime.
-              sf.stack[sf.sp++] = null;
+              frame.stack[frame.sp++] = null;
               break;
             default :
               me.fatal("[mainLoop] Unknown opcode : " + cmd[0]);
@@ -791,7 +839,7 @@ RubyContext.prototype = {
       // After the loop finished
       function(res, ex) {
         if (ex) {
-          me.handleException(opcode, sf, ip, ex, 0, callback);
+          me.handleException(opcode, frame, ip, ex, 0, callback);
         } else {
           callback(res, ex);
         }
@@ -800,64 +848,68 @@ RubyContext.prototype = {
     );
   },
   
-  deserializeObject: function(node, sf) {
+  deserializeObject: function(node) {
     var me = this;
     if (typeof(node) == "object") {
       if (node.type == "symbol") {
         return me.intern(node.value);
       } else if (node.type == "regexp") {
-        return me.newRubyRegexp(node.source, node.options);
+        return me.newRegexp(node.source, node.options);
       } else if (node.type == "range") {
-        return me.newRubyRange(
+        return me.newRange(
           me.deserializeObject(node.begin), me.deserializeObject(node.end), node.exclude_end);
       } else if (node.type == "constant") {
-        return me.getConstant(sf, null, node.name);
+        return me.getConstant(me.Object, node.name);
       } else {
         me.fatal("Unknown type for putobject: " + node.type);
       }
     } else if (typeof(node) == "string") {
-      return me.newRubyString(node);
+      return me.newString(node);
     } else {
       return node;
     }
   },
   
-  handleException: function(opcode, sf, ip, ex, catchIndex, callback) {
+  handleException: function(opcode, frame, ip, ex, catchIndex, callback) {
     //console.log(["handleException", ex, catchIndex]);
     var me = this;
     var deferred = false;
     if (catchIndex == 0) {
       var trace = me.getInstanceVar(ex, "@backtrace");
       if (trace) {
-        var line = sf.fileName + ":" + sf.lineNo + ":in `" + sf.methodName + "'";
-        me.sendSync(trace, "push", [me.newRubyString(line)]);
+        var line = frame.fileName + ":" + frame.lineNo + ":in `" + frame.methodName + "'";
+        me.sendSync(trace, "push", [me.newString(line)]);
       } else {
-        trace = me.newRubyArray();
+        trace = me.newArray();
         me.setInstanceVar(ex, "@backtrace", trace);
       }
     }
-    sf.localVars[1] = ex; // $!
+    frame.localVars[1] = ex; // $!
       // TODO: Looks like it is not always 1.
-    for (var i = catchIndex; !deferred && i < sf.catchTable.length; ++i) {
+    for (var i = catchIndex; !deferred && i < frame.catchTable.length; ++i) {
       (function() {
-        var catchType = sf.catchTable[i][0];
-        var catchOpcode = sf.catchTable[i][1];
-        var start = opcode.label2ip[sf.catchTable[i][2]];
-        var end = opcode.label2ip[sf.catchTable[i][3]];
-        var contLabel = sf.catchTable[i][4];
+        var catchType = frame.catchTable[i][0];
+        var catchOpcode = frame.catchTable[i][1];
+        var start = opcode.label2ip[frame.catchTable[i][2]];
+        var end = opcode.label2ip[frame.catchTable[i][3]];
+        var contLabel = frame.catchTable[i][4];
         var nextIndex = i + 1;
         if (catchType == "rescue" && ip >= start && ip < end) {
           if (me.vm.debug) console.log(["catch table -> ", nextIndex - 1, ex]);
-          me.runOpcode(catchOpcode, sf.invokeClass, sf.methodName, sf.self, [], null, sf, sf, false,
-            function(res, ex) {
-              if (me.vm.debug) console.log(["catch table <- ", nextIndex - 1, ex]);
-              if (ex) {
-                me.handleException(opcode, sf, ip, ex, nextIndex, callback);
-              } else {
-                me.mainLoop(opcode, sf, contLabel, callback);
-              }
+          me.runOpcode({
+            opcode: catchOpcode,
+            invokeClass: frame.invokeClass,
+            methodName: frame.methodName,
+            self: frame.self,
+            parentFrame: frame
+          }, function(res, ex) {
+            if (me.vm.debug) console.log(["catch table <- ", nextIndex - 1, ex]);
+            if (ex) {
+              me.handleException(opcode, frame, ip, ex, nextIndex, callback);
+            } else {
+              me.mainLoop(opcode, contLabel, callback);
             }
-          );
+          });
           deferred = true;
         } else {
           // TODO: not implemented
@@ -865,101 +917,62 @@ RubyContext.prototype = {
       })();
     }
     if (deferred) return;
-    if (me.getClass(ex) == me.ReturnException && ex.targetStackFrame == sf) {
-      sf.stack[sf.sp++] = ex.value;
+    if (me.classOf(ex) == me.ReturnException && ex.targetFrame == frame) {
+      frame.stack[frame.sp++] = ex.value;
       callback();
     } else {
       callback(null, ex);
     }
   },
   
-  invokeMethodAndPush: function(
-        receiver, methodName, args, block, sf, type, invokeSuper, classObj, callback) {
+  invokeMethodAndPush: function(params, callback) {
     var me = this;
-    me.invokeMethod(
-          receiver, methodName, args, block, sf, type, invokeSuper, classObj, function(res, ex) {
+    var frame = me.currentFrame;
+    me.invokeMethod(params, function(res, ex) {
       if (ex) {
-        if (me.getClass(ex) == me.BreakException && ex.targetStackFrame == sf) {
+        if (me.classOf(ex) == me.BreakException && ex.targetFrame == frame) {
           res = ex.value;
         } else {
           return callback(null, ex);
         }
       }
-      sf.stack[sf.sp++] = res;
-      //console.log("stack: ", sf, sf.stack.slice(0, sf.sp), sf.sp);
+      frame.stack[frame.sp++] = res;
       callback(res);
     });
   },
   
   /**
    * Invoke the method
-   * @param {RubyModule} classObj
-   * @param {RubyObject} receiver
-   * @param {String} methodName
-   * @param {Array} args
-   * @param {RubyObject} block
-   * @param {RubyVM.StackFrame} sf
-   * @param {Number} type VM_CALL_ARGS_SPLAT_BIT, ...
-   * @param {boolean} invokeSuper
+   * @param {RubyObject} params.receiver
+   * @param {String} params.methodName
+   * @param {Array} params.args
+   * @param {RubyObject} params.block
+   * @param {Number} params.type VM_CALL_ARGS_SPLAT_BIT, ...
+   * @param {boolean} params.super
+   * @param {boolean} params.klass Base point class used for super
    * @param {function} callback
    */
-  invokeMethod : function(
-        receiver, methodName, args, block, sf, type, invokeSuper, classObj, callback) {
+  invokeMethod : function(params, callback) {
     var me = this;
-    var receiverClass = me.getClass(receiver);
-    var invokeClass = receiverClass;
-    var invokeMethodName = methodName;
-    var func = null;
+    var receiverClass = me.classOf(params.receiver);
     
     if (me.vm.debug) {
-      console.log(["invokeMethod ->", receiver, methodName, args, block, type, invokeSuper]);
+      console.log("invokeMethod ->",
+        params.receiver, params.methodName, params.args, params.block, params.super);
       var origCallback = callback;
       callback = function(res, ex) {
         if (ex) {
-          console.log(["invokeMethod <- exception", ex]);
+          console.log("invokeMethod <- exception", ex);
           return origCallback(null, ex);
         }
-        console.log(["invokeMethod <-", res]);
+        console.log("invokeMethod <-", res);
         origCallback(res);
       }
     }
 
-    // Invoke host method
-    var res = me.invokeNative(receiver, methodName, args, receiverClass);
-    if (res) {
-      callback(res.result);
-      return;
-    }
-    
-    if (!receiverClass) {
-      return me.raise(me.ArgumentError, "self is not a Ruby object", callback);
-    }
-    
-    var singletonClass = receiver != null ? receiver.singletonClass : null;
-    var searchClass = singletonClass || receiverClass;
-    
-    var skip = invokeSuper;
-    me.eachAncestor(searchClass, function(c) {
-      if (!skip) {
-        invokeClass = c;
-        func = c.methods[methodName];
-        if (func) return func;
-      }
-      if (invokeSuper && c == classObj) skip = false;
-    });
-    if (func == null) {
-      if (methodName != "method_missing") {
-        var newArgs = [me.intern(methodName)].concat(args);
-        me.invokeMethod(
-          receiver, "method_missing", newArgs, block, sf, type, false, null, callback);
-        return;
-      } else {
-        me.fatal("This must not happen");
-      }
-    }
-    
-    // Splat array args
-    if (type & RubyVM.VM_CALL_ARGS_SPLAT_BIT) {
+    var args = params.args.concat([]);
+    if (params.type & RubyVM.VM_CALL_ARGS_SPLAT_BIT) {
+      // Splat array args
       var last = args.pop();
       var size = me.arraySize(last);
       for (var i = 0; i < size; ++i) {
@@ -967,23 +980,66 @@ RubyContext.prototype = {
       }
     }
     
-    // Exec method
+    // Invokes host method if appropriate
+    var res = me.invokeNative(params.receiver, params.methodName, args, receiverClass);
+    if (res) return callback(res.result);
+    
+    if (!receiverClass) {
+      return me.raise(me.ArgumentError, "self is not a Ruby object", callback);
+    }
+    
+    // Searches for invokeClass and func
+    var singletonClass = params.receiver != null ? params.receiver.singletonClass : null;
+    var searchClass = singletonClass || receiverClass;
+    var invokeClass;
+    var func = null;
+    var skip = params.super;
+    me.eachAncestor(searchClass, function(c) {
+      if (!skip) {
+        invokeClass = c;
+        func = c.methods[params.methodName];
+        if (func) return func;
+      }
+      if (params.super && c == params.klass) skip = false;
+    });
+    if (func == null) {
+      if (params.methodName != "method_missing") {
+        var newArgs = [me.intern(params.methodName)].concat(args);
+        me.invokeMethod({
+          receiver: params.receiver,
+          methodName: "method_missing",
+          args: newArgs,
+          block: params.block
+        }, callback);
+        return;
+      } else {
+        me.fatal("This must not happen");
+      }
+    }
+    
+    // Invokes method
     switch (typeof(func)) {
       case "function" :
         if (func.async) {
-          func.call(me, me, receiver, args, block, function(res, ex) {
+          func.call(me, me, params.receiver, args, params.block, function(res, ex) {
             if (ex) return callback(null, ex);
             callback(me.toRuby(res));
           });
           return;
         } else {
-          var res = func.call(me, me, receiver, args, block);
+          var res = func.call(me, me, params.receiver, args, params.block);
           callback(me.toRuby(res));
         }
         break;
       case "object" :
-        me.runOpcode(func, invokeClass,
-            invokeMethodName, receiver, args, block, null, sf, false, callback);
+        me.runOpcode({
+          opcode: func,
+          invokeClass: invokeClass,
+          methodName: params.methodName,
+          self: params.receiver,
+          args: args,
+          block: params.block
+        }, callback);
         return;
       default :
         me.fatal("[invokeMethod] Unknown function type : " + typeof(func));
@@ -994,7 +1050,7 @@ RubyContext.prototype = {
   respondTo: function(receiver, methodName) {
     var me = this;
     var singletonClass = receiver != null ? receiver.singletonClass : null;
-    var searchClass = singletonClass || me.getClass(receiver);
+    var searchClass = singletonClass || me.classOf(receiver);
     var func = null;
     me.eachAncestor(searchClass, function(c) {
       func = c.methods[methodName];
@@ -1017,7 +1073,7 @@ RubyContext.prototype = {
         res = me.invokeNativeMethod(receiver, methodName, args);
         break;
       case me.NativeClass:
-        if(methodName == "new") {
+        if (methodName == "new") {
           res = me.invokeNativeNew(receiver, methodName, args);
         } else {
           res = me.invokeNativeMethod(receiver, methodName, args);
@@ -1035,19 +1091,19 @@ RubyContext.prototype = {
   getNativeEnvVar: function(receiver, varName, args) {
     var me = this;
     //trace(varName);
-    if(me.vm.env == "flash" && varName == "import") {
+    if (me.vm.env == "flash" && varName == "import") {
       var imp = args[0].value;
-      if(imp.charAt(imp.length - 1) != "*")
+      if (imp.charAt(imp.length - 1) != "*")
         me.fatal("[getNativeEnvVar] Param must ends with * : " + imp);
       me.vm.asPackages.push(imp.substr(0, imp.length - 1));
       return null;
     }
     
-    if(varName in receiver.instanceVars) {
+    if (varName in receiver.instanceVars) {
       return receiver.instanceVars[varName];
     }
     
-    if(me.vm.env == "browser" || me.vm.env == "console") {
+    if (me.vm.env == "browser" || me.vm.env == "console") {
       // Get native global variable
       var v = eval("(" + varName + ")");
       if (typeof(v) != "undefined") {
@@ -1061,27 +1117,27 @@ RubyContext.prototype = {
           return obj;
         }
       }
-    } else if(me.vm.env == "flash") {
+    } else if (me.vm.env == "flash") {
       // Get NativeClass Object
-      var classObj;
-      if(varName in me.vm.nativeClassObjCache) {
-        classObj = me.vm.nativeClassObjCache[varName];
+      var klass;
+      if (varName in me.vm.nativeClassObjCache) {
+        klass = me.vm.nativeClassObjCache[varName];
       } else {
         for(var i=0; i<me.vm.asPackages.length; i++) {
           try {
-            classObj = getDefinitionByName(me.vm.asPackages[i] + varName);
+            klass = getDefinitionByName(me.vm.asPackages[i] + varName);
             break;
           } catch(e) {
           }
         }
-        if(classObj == null) {
+        if (klass == null) {
           me.fatal("[getNativeEnvVar] Cannot find class: " + varName);
         }
-        me.vm.nativeClassObjCache[varName] = classObj;
+        me.vm.nativeClassObjCache[varName] = klass;
       }
       return {
         className : "NativeClass",
-        value : classObj
+        value : klass
       }
     }
     
@@ -1095,20 +1151,20 @@ RubyContext.prototype = {
     var me = this;
     // Split methodName and operator
     var op = me.getOperator(methodName);
-    if(op != null) {
+    if (op != null) {
       methodName = methodName.substr(0, methodName.length - op.length);
     }
     
     var ret;
     if (typeof(receiver.value[methodName]) == "function") {
       // Invoke native method
-      if(op != null)
+      if (op != null)
         me.fatal("[invokeNativeMethod] Unsupported operator: " + op);
       var convArgs = me.arrayRubyToNative(args);
       ret = receiver.value[methodName].apply(receiver.value, convArgs);
     } else {
       // Get native instance variable
-      if(op == null) {
+      if (op == null) {
         ret = receiver.value[methodName];
       } else {
         switch(op) {
@@ -1150,68 +1206,67 @@ RubyContext.prototype = {
   
   /**
    * Set the Constant
-   * @param {RubyVM.StackFrame} sf
-   * @param {Object} classObj
+   * @param {Object} klass
    * @param {String} constName
    * @param constValue
+   * @param {RubyVM.Frame} frame
    * @private
    */
-  setConstant : function(sf, classObj, constName, constValue) {
+  setConstant : function(klass, constName, constValue, frame) {
     var me = this;
-    if (classObj == null) {
-      classObj = sf.cbase;
-    } else if (classObj === false) {
+    if (klass == null) {
+      klass = frame.cbase;
+    } else if (klass === false) {
       // TODO
       me.fatal("[setConstant] Not implemented");
     }
-    classObj.constants[constName] = constValue;
+    klass.constants[constName] = constValue;
   },
   
   /**
    * Get the constant
-   * @param {RubyVM.StackFrame} sf
-   * @param {Object} classObj
+   * @param {Object} klass
    * @param {String} constName
-   * @return constant value
+   * @param {RubyVM.Frame} frame
    * @private
    */
-  getConstant : function(sf, classObj, constName) {
+  getConstant : function(klass, constName, frame) {
     var me = this;
-    if (classObj == null) {
+    if (klass == null) {
       var isFound = false;
       // Search cbase and its parents
-      for (classObj = sf.cbase; classObj; ) {
-        if (constName in classObj.constants) {
+      for (klass = frame.cbase; klass; ) {
+        if (constName in klass.constants) {
           isFound = true;
           break;
         }
-        classObj = classObj.upperModule;
+        klass = klass.upperClass;
       }
       // Search super classes
       if (!isFound) {
-        for (classObj = sf.invokeClass; classObj && classObj != me.Object; ) {
-          if (constName in classObj.constants) {
+        for (klass = frame.invokeClass; klass && klass != me.Object; ) {
+          if (constName in klass.constants) {
             isFound = true;
             break;
           }
-          classObj = classObj.superClass;
+          klass = klass.superClass;
         }
       }
     }
-    if (classObj && constName in classObj.constants) {
-      var res = classObj.constants[constName];
+    if (klass && constName in klass.constants) {
+      var res = klass.constants[constName];
       return res == null ? null : res; // Converts undefined to null
     } else {
       return; // Returns undefined
     }
   },
   
-  getLocalStackFrame: function(sf) {
+  getLocalFrame: function(frame) {
     var me = this;
-    while (sf.isProc || sf.isCatch) {
-      sf = sf.parentStackFrame;
+    while (frame.isProc || frame.isCatch) {
+      frame = frame.parentFrame;
     }
-    return sf;
+    return frame;
   },
   
   // imported from rb_include_module()
@@ -1245,10 +1300,10 @@ RubyContext.prototype = {
   runFromScriptTag : function(url) {
     var me = this;
     var ary = document.getElementsByTagName("script");
-    for(var i=0; i < ary.length; i++) {
+    for (var i=0; i < ary.length; i++) {
       var hoge = ary[i].type;
-      if(ary[i].type == "text/ruby") {
-        me.compileAndRun({src: ary[i].text});
+      if (ary[i].type == "text/ruby") {
+        me.compileAndRun({script: ary[i].text});
         break;
       }
     }
@@ -1257,19 +1312,17 @@ RubyContext.prototype = {
   getOperator: function(str) {
     var me = this;
     var result = str.match(/[^\+\-\*\/%=]+([\+\-\*\/%]?=)/);
-    if(result == null || result == false) {
+    if (result == null || result == false) {
       return null;
     }
-    if(result instanceof Array) {
+    if (result instanceof Array) {
       return result[1];
     } else {
       RegExp.$1;
     }
   },
   
-  // from hot_ruby_util
-  
-  sendAsync: function(receiver, name, args, block, callback) {
+  sendAsync: function(receiver, methodName, args, block, callback) {
     var me = this;
     if (typeof(callback) == "undefined") {
       if (typeof(block) == "undefined") {
@@ -1280,15 +1333,24 @@ RubyContext.prototype = {
         block = null;
       }
     }
-    //console.log(receiver, name, args, block, callback);
-    me.invokeMethod(receiver, name, args, block, null, 0, false, null, callback);
+    me.invokeMethod({
+      receiver: receiver,
+      methodName: methodName,
+      args: args,
+      block: block
+    }, callback);
   },
   
-  sendSync: function(receiver, name, args, block) {
+  sendSync: function(receiver, methodName, args, block) {
     var me = this;
     var done = false;
     var result;
-    me.invokeMethod(receiver, name, args, block, null, 0, false, null, function(res, ex) {
+    me.invokeMethod({
+      receiver: receiver,
+      methodName: methodName,
+      args: args,
+      block: block
+    }, function(res, ex) {
       if (ex) {
         // TODO: throw instead
         console.error("Exception in sendSync: ", ex);
@@ -1303,11 +1365,11 @@ RubyContext.prototype = {
   },
   
   /**
-   * Returns class name from object.
+   * Returns class of the object.
    * @param obj
-   * @return {String}
+   * @return {RubyClass}
    */
-  getClass : function(obj) {
+  classOf : function(obj) {
     var me = this;
     if (obj == null)
       return me.NilClass;
@@ -1320,7 +1382,7 @@ RubyContext.prototype = {
       case "boolean" :
         return obj ? me.TrueClass : me.FalseClass;
       default :
-        me.fatal("[getClass] unknown type : " + typeof(obj));
+        me.fatal("[classOf] unknown type : " + typeof(obj));
     }
   },
   
@@ -1328,7 +1390,7 @@ RubyContext.prototype = {
     var me = this;
     if (obj != null && obj.rubyClass) {
       if (!obj.singletonClass) {
-        obj.singletonClass = new RubyModule(me, null, {
+        obj.singletonClass = new RubyClass(me, null, {
           superClass: obj.rubyClass,
           type: "singleton"
         });
@@ -1339,23 +1401,23 @@ RubyContext.prototype = {
     }
   },
   
-  eachAncestor: function(classObj, block) {
+  eachAncestor: function(klass, block) {
     var me = this;
     var res;
-    while (classObj) {
-      if (typeof(res = block(classObj)) != "undefined") return res;
-      var included = classObj.included;
+    while (klass) {
+      if (typeof(res = block(klass)) != "undefined") return res;
+      var included = klass.included;
       for (var i = included.length - 1; i >= 0; --i) {
         if (typeof(res = block(included[i])) != "undefined") return res;
       }
-      classObj = classObj.superClass;
+      klass = klass.superClass;
     }
   },
   
-  kindOf: function(obj, classObj) {
+  kindOf: function(obj, klass) {
     var me = this;
-    var res = me.eachAncestor(me.getClass(obj), function(c) {
-      if (c == classObj) return true;
+    var res = me.eachAncestor(me.classOf(obj), function(c) {
+      if (c == klass) return true;
     });
     return res || false;
   },
@@ -1364,24 +1426,24 @@ RubyContext.prototype = {
     var me = this;
     params = params || {};
     params.type = "class";
-    return new RubyModule(me, className, params);
+    return new RubyClass(me, className, params);
   },
   
   defineModule: function(className, params) {
     var me = this;
     params = params || {};
     params.type = "module";
-    return new RubyModule(me, className, params);
+    return new RubyClass(me, className, params);
   },
   
-  defineMethod: function(classObj, name, options, func) {
+  defineMethod: function(klass, name, options, func) {
     var me = this;
     if (!func) {
       func = options;
       options = {};
     }
     func.async = options.async;
-    classObj.methods[name] = func;
+    klass.methods[name] = func;
   },
   
   defineSingletonMethod: function(obj, name, options, func) {
@@ -1389,15 +1451,20 @@ RubyContext.prototype = {
     me.defineMethod(me.getSingletonClass(obj), name, options, func);
   },
   
-  defineClassMethod: function(classObj, name, options, func) {
+  defineClassMethod: function(klass, name, options, func) {
     var me = this;
-    me.defineSingletonMethod(classObj, name, options, func);
+    me.defineSingletonMethod(klass, name, options, func);
   },
   
-  makeModuleFunction: function(classObj, name) {
+  aliasMethod: function(klass, newName, originalName) {
+    var me = this;
+    klass.methods[newName] = klass.methods[originalName];
+  },
+  
+  makeModuleFunction: function(klass, name) {
     var me = this;
     // TODO: make it private
-    me.getSingletonClass(classObj).methods[name] = classObj.methods[name];
+    me.getSingletonClass(klass).methods[name] = klass.methods[name];
   },
   
   getInstanceVar: function(receiver, name) {
@@ -1422,21 +1489,18 @@ RubyContext.prototype = {
       var func = function() {
         var proc = arguments.callee.proc;
         var result;
-        me.runOpcode(
-          proc.opcode, 
-          proc.parentStackFrame.invokeClass, 
-          proc.parentStackFrame.methodName, 
-          proc.parentStackFrame.self, 
-          me.arrayNativeToRuby(arguments),
-          null,
-          proc.parentStackFrame,
-          null,
-          true,
-          function(res, ex) {
-            if (ex) throw ex;
-            result = res;
-          }
-        );
+        me.runOpcode({
+          opcode: proc.opcode,
+          invokeClass: proc.parentFrame.invokeClass,
+          methodName: proc.parentFrame.methodName,
+          self: proc.parentFrame.self,
+          args: me.arrayNativeToRuby(arguments),
+          parentFrame: proc.parentFrame,
+          isProc: true
+        }, function(res, ex) {
+          if (ex) throw ex;
+          result = res;
+        });
         return result;
       };
       func.proc = v;
@@ -1451,7 +1515,7 @@ RubyContext.prototype = {
       var hash = {};
       for (var i = 0; i < numKeys; ++i) {
         var key = me.arrayAt(keys, i);
-        if (me.getClass(key) != me.String) me.fatal("Key must be String");
+        if (me.classOf(key) != me.String) me.fatal("Key must be String");
         hash[me.toNative(key)] = me.toNative(me.sendSync(v, "get_key_cv", [key]));
       }
       return hash;
@@ -1489,14 +1553,14 @@ RubyContext.prototype = {
       return v;
     }
     if (typeof(v) == "string") {
-      return me.newRubyString(v);
+      return me.newString(v);
     }
     if (typeof(v) == "object" && v instanceof Array) {
       var ary = new Array(v.length);
       for (var i = 0; i < v.length; ++i) {
         ary[i] = me.toRuby(v[i]);
       }
-      return me.newRubyArray(ary);
+      return me.newArray(ary);
     }
     var obj = me.newObject(me.NativeObject);
     obj.value = v;
@@ -1516,19 +1580,24 @@ RubyContext.prototype = {
     return convAry;
   },
   
+  newObject: function(klass) {
+    var me = this;
+    return new RubyObject(me, klass);
+  },
+  
   /**
    * JavaScript String -> Ruby String
    * @param {String} str
    * @return {String}
    */
-  newRubyString : function(str) {
+  newString : function(str) {
     var me = this;
     var obj = me.newObject(me.String);
     obj.value = str;
     return obj;
   },
   
-  newRubyRegexp : function(source, options) {
+  newRegexp : function(source, options) {
     var me = this;
     var exp = me.newObject(me.Regexp);
     exp.source = source;
@@ -1543,18 +1612,18 @@ RubyContext.prototype = {
   /**
    * opcode -> Ruby Proc
    * @param {Array} opcode
-   * @param {RubyVM.StackFrame} sf
+   * @param {RubyVM.Frame} frame
    * @return {Object} Proc
    */
-  newRubyProc : function(opcode, sf) {
+  newProc : function(opcode, frame) {
     var me = this;
     var obj = me.newObject(me.Proc);
     obj.opcode = opcode;
-    obj.parentStackFrame = sf;
+    obj.parentFrame = frame;
     return obj;
   },
   
-  newRubyTuple : function(ary) {
+  newTuple : function(ary) {
     var me = this;
     ary = ary || [];
     var tuple = me.newObject(me.Tuple);
@@ -1567,7 +1636,7 @@ RubyContext.prototype = {
    * @param {Array} ary
    * @return {RubyObject}
    */
-  newRubyArray : function(ary) {
+  newArray : function(ary) {
     var me = this;
     ary = ary || [];
     var tuple = me.newObject(me.Tuple);
@@ -1586,7 +1655,7 @@ RubyContext.prototype = {
    * @param {Array} ary
    * @return {Object}
    */
-  newRubyHash : function(ary) {
+  newHash : function(ary) {
     var me = this;
     var hash = me.newObject(me.Hash);
     me.sendSync(hash, "initialize", []);
@@ -1602,7 +1671,7 @@ RubyContext.prototype = {
    * @param {Number} first
    * @param {boolean} exclude_end
    */
-  newRubyRange : function(first, last, exclude_end) {
+  newRange : function(first, last, exclude_end) {
     var me = this;
     var obj = me.newObject(me.Range);
     obj.instanceVars = {
@@ -1616,9 +1685,12 @@ RubyContext.prototype = {
   intern: function(str) {
     var me = this;
     // TODO: should be Symbol instead of String
-    return me.newRubyString(str);
+    return me.newString(str);
   },
   
+  /**
+   * Returns true for objects which are evaluated as true in if-statement etc. in Ruby.
+   */
   toBoolean: function(val) {
     var me = this;
     return val !== false && val != null;
@@ -1649,6 +1721,25 @@ RubyContext.prototype = {
     return keys;
   },
   
+  callProc: function(proc, args, block, callback) {
+    var me = this;
+    me.runOpcode({
+      opcode: proc.opcode,
+      invokeClass: proc.parentFrame.invokeClass,
+      methodName: proc.parentFrame.methodName,
+      self: proc.parentFrame.self,
+      args: args,
+      block: block,
+      parentFrame: proc.parentFrame,
+      isProc: true
+    }, function(res, ex) {
+        if (ex) return callback(null, ex);
+        var frame = proc.parentFrame;
+        callback(frame.stack[--frame.sp]);
+      }
+    );
+  },
+  
   getGlobalVar: function(name) {
     var me = this;
     return me.vm.globalVars[name];
@@ -1659,17 +1750,17 @@ RubyContext.prototype = {
     me.vm.globalVars[name] = value;
   },
   
-  raise: function(classObj, message, callback) {
+  raise: function(klass, message, callback) {
     var me = this;
-    var ex = me.newObject(classObj || me.Exception);
+    var ex = me.newObject(klass || me.Exception);
     me.setInstanceVar(ex, "@message", me.toRuby(message));
-    me.setInstanceVar(ex, "@backtrace", me.newRubyArray());
+    me.setInstanceVar(ex, "@backtrace", me.newArray());
     callback(null, ex);
   },
   
   blockGiven: function() {
     var me = this;
-    return me.getLocalStackFrame(me.latestStackFrame).block != null;
+    return me.getLocalFrame(me.currentFrame).block != null;
   },
   
   // Async version of for (; cond(); increment()) { body(); }
@@ -1698,20 +1789,22 @@ RubyContext.prototype = {
   },
 
   /**
-   * Print to debug dom.
+   * Prints to console.
    * @param {String} str
    */
-  printDebug : function(str) {
+  printToConsole : function(str) {
     var me = this;
     switch(me.vm.env) {
       case "browser":
-        var out = me.vm.debugDom;
+        var out = me.vm.consoleElement;
         if (out) {
           str = str.replace(/ /g, "\u00a0"); // " " -> "&nbsp;"
           str.split(/(\n)/).each(function(piece) {
             var node = piece == "\n" ? document.createElement("br") : document.createTextNode(piece);
             out.appendChild(node);
           });
+        } else {
+          console.log(str);
         }
         break;
       case "flash":
@@ -1729,7 +1822,7 @@ RubyContext.prototype = {
   fatal: function(message) {
     var me = this;
     console.error(message);
-    me.printDebug(message + "\n");
+    me.printToConsole(message + "\n");
     Aborted.aborted;
   },
   
@@ -1750,11 +1843,11 @@ RubyVM.VM_CALL_FCALL_BIT = 8;
 RubyVM.VM_CALL_VCALL_BIT = 16;
 
 /**
- * StackFrame
+ * Frame
  * @class
  * @construtor
  */
-RubyVM.StackFrame = function() {
+RubyVM.Frame = function() {
   /** 
    * Stack Pointer
    * @type Number 
@@ -1796,17 +1889,17 @@ RubyVM.StackFrame = function() {
    */
   this.self = null;
   /** 
-   * StackFrame of scope enclosing this.
+   * Frame of scope enclosing this.
    * Valid for block and catch frame. null for others.
-   * @type RubyVM.StackFrame 
+   * @type RubyVM.Frame 
    */
-  this.parentStackFrame = null;
+  this.parentFrame = null;
   /** 
-   * StackFrame which has invoked this.
+   * Frame which has invoked this.
    * null if it has invoked from native (JavaScript) method.
-   * @type RubyVM.StackFrame 
+   * @type RubyVM.Frame 
    */
-  this.callerStackFrame = null;
+  this.senderFrame = null;
   /** 
    * Is Proc(Block)
    * @type boolean 

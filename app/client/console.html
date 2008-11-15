@@ -14,7 +14,7 @@
       Element.show("loading");
       var src = document.getElementById("srcArea").value;
       vm.debug = debug;
-      vm.compileAndRun({src: src}, function() {
+      vm.compileAndRun({script: src}, function() {
         Element.hide("loading");
       });
     }
@@ -28,8 +28,7 @@
     }
     
     function init() {
-      vm = new RubyVM();
-      vm.debugDom = document.getElementById("debug");
+      vm = new RubyVM({consoleElement: $("debug")});
       Element.hide("loading");
     }
     

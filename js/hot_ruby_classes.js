@@ -12,14 +12,14 @@ RubyVM.addInitializer(function(ctx) {
     
     ctx.defineMethod(ctx.Object, "class",
       function(ctx, self) {
-        return ctx.getClass(self);
+        return ctx.classOf(self);
       }
     );
     
     ctx.defineMethod(ctx.Object, "method_missing", {async: true},
       function(ctx, self, args, block, callback) {
         return ctx.raise(ctx.NoMethodError,
-          "undefined method `" + args[0].value + "' for " + ctx.getClass(self).name,
+          "undefined method `" + args[0].value + "' for " + ctx.classOf(self).name,
           callback);
       }
     );
@@ -57,11 +57,7 @@ RubyVM.addInitializer(function(ctx) {
       }
     );
     
-    ctx.defineMethod(ctx.Object, "kind_of?", {async: true},
-      function(ctx, self, args, block, callback) {
-        ctx.sendAsync(self, "is_a?", args, block, callback);
-      }
-    );
+    ctx.aliasMethod(ctx.Object, "kind_of?", "is_a?");
     
     ctx.defineMethod(ctx.Object, "===", {async: true},
       function(ctx, self, args, block, callback) {
@@ -96,13 +92,13 @@ RubyVM.addInitializer(function(ctx) {
     
     ctx.defineMethod(ctx.Object, "to_s",
       function(ctx, self) {
-        return "#<" + ctx.getClass(self).name + ":????>";
+        return "#<" + ctx.classOf(self).name + ":????>";
       }
     );
     
     ctx.defineMethod(ctx.Object, "inspect",
       function(ctx, self) {
-        return "#<" + ctx.getClass(self).name + ":????>";
+        return "#<" + ctx.classOf(self).name + ":????>";
       }
     );
     
@@ -141,7 +137,7 @@ RubyVM.addInitializer(function(ctx) {
     ctx.defineMethod(ctx.Object, "__write__",
       function(ctx, self, args) {
         // For Kernel.__print_exception__
-        ctx.printDebug(args[0].value);
+        ctx.printToConsole(args[0].value);
       }
     );
     
@@ -151,9 +147,10 @@ RubyVM.addInitializer(function(ctx) {
       }
     );
     
+    // for debug
     ctx.defineMethod(ctx.Object, "__debug__",
       function(ctx, self, args) {
-        console.log(ctx.latestStackFrame);
+        console.log(ctx.currentFrame);
       }
     );
     
@@ -182,6 +179,18 @@ RubyVM.addInitializer(function(ctx) {
       }
     );
     
+    ctx.defineMethod(ctx.Module, "protected",
+      function(ctx, self, args) {
+        // TODO: implement
+      }
+    );
+    
+    ctx.defineMethod(ctx.Module, "public",
+      function(ctx, self, args) {
+        // TODO: implement
+      }
+    );
+    
     ctx.defineMethod(ctx.Module, "module_function",
       function(ctx, self, args) {
         if (args.length == 0) {
@@ -196,7 +205,7 @@ RubyVM.addInitializer(function(ctx) {
     
     ctx.defineMethod(ctx.Module, "alias_method",
       function(ctx, self, args) {
-        self.methods[args[0].value] = self.methods[args[1].value];
+        ctx.aliasMethod(self, args[0].value, args[1].value);
       }
     );
     
@@ -206,7 +215,7 @@ RubyVM.addInitializer(function(ctx) {
         ctx.eachAncestor(self, function(c) {
           ary.push(c);
         });
-        return ctx.newRubyArray(ary);
+        return ctx.newArray(ary);
       }
     );
     
@@ -263,6 +272,7 @@ RubyVM.addInitializer(function(ctx) {
     
   }
 
+  // Manually adds missing links between three classes above.
   ctx.Object.constants.Object = ctx.Object;
   ctx.Object.rubyClass = ctx.Class;
   ctx.Object.singletonClass.rubyClass = ctx.Class;
@@ -403,36 +413,17 @@ RubyVM.addInitializer(function(ctx) {
     ctx.defineMethod(ctx.Proc, "initialize",
       function(ctx, self, args, block) {
         self.opcode = block.opcode;
-        self.parentStackFrame = block.parentStackFrame;
-      }
-    );
-    
-    ctx.defineMethod(ctx.Proc, "yield", {async: true},
-      function(ctx, self, args, block, callback) {
-        ctx.runOpcode(
-          self.opcode, 
-          self.parentStackFrame.invokeClass, 
-          self.parentStackFrame.methodName, 
-          self.parentStackFrame.self, 
-          args, 
-          block,
-          self.parentStackFrame,
-          null,
-          true,
-          function(res, ex) {
-            if (ex) return callback(null, ex);
-            var sf = self.parentStackFrame;
-            callback(sf.stack[--sf.sp]);
-          }
-        );
+        self.parentFrame = block.parentFrame;
       }
     );
     
     ctx.defineMethod(ctx.Proc, "call", {async: true},
       function(ctx, self, args, block, callback) {
-        ctx.sendAsync(self, "yield", args, block, callback);
+        ctx.callProc(self, args, block, callback);
       }
     );
+    
+    ctx.aliasMethod(ctx.Proc, "yield", "call");
     
     // Rubinius-specific methods
     
@@ -445,96 +436,8 @@ RubyVM.addInitializer(function(ctx) {
     ctx.defineMethod(ctx.Proc, "home",
       function(ctx, self) {
         var mc = ctx.newObject(ctx.MethodContext);
-        mc.stackFrame = ctx.getLocalStackFrame(self.parentStackFrame);
+        mc.frame = ctx.getLocalFrame(self.parentFrame);
         return mc;
-      }
-    );
-    
-  }
-
-  ctx.defineClass("Float");
-  {
-    
-    ctx.defineMethod(ctx.Float, "+",
-      function(ctx, self, args) {
-        return self + args[0];
-      }
-    );
-
-    ctx.defineMethod(ctx.Float, "-",
-      function(ctx, self, args) {
-        return self - args[0];
-      }
-    );
-
-    ctx.defineMethod(ctx.Float, "*",
-      function(ctx, self, args) {
-        return self * args[0];
-      }
-    );
-
-    ctx.defineMethod(ctx.Float, "/",
-      function(ctx, self, args) {
-        return self / args[0];
-      }
-    );
-    
-    ctx.defineMethod(ctx.Float, "%",
-      function(ctx, self, args) {
-        return self % args[0];
-      }
-    );
-    
-    ctx.defineMethod(ctx.Float, "<=>",
-      function(ctx, self, args) {
-        if(self > args[0])
-          return 1;
-        else if(self == args[0])
-          return 0;
-        if(self < args[0])
-          return -1;
-      }
-    );
-    
-    ctx.defineMethod(ctx.Float, "<",
-      function(ctx, self, args) {
-        return self < args[0];
-      }
-    );
-
-    ctx.defineMethod(ctx.Float, ">",
-      function(ctx, self, args) {
-        return self > args[0];
-      }
-    );
-    
-    ctx.defineMethod(ctx.Float, "<=",
-      function(ctx, self, args) {
-        return self <= args[0];
-      }
-    );
-
-    ctx.defineMethod(ctx.Float, ">=",
-      function(ctx, self, args) {
-        return self >= args[0];
-      }
-    );
-    
-    ctx.defineMethod(ctx.Float, "==",
-      function(ctx, self, args) {
-        return self == args[0];
-      }
-    );
-    
-    ctx.defineMethod(ctx.Float, "to_s",
-      function(ctx, self) {
-        return self.toString();
-      }
-    );
-
-    ctx.defineMethod(ctx.Float, "inspect",
-      function(ctx, self) {
-        return self.toString();
       }
     );
     
@@ -579,11 +482,11 @@ RubyVM.addInitializer(function(ctx) {
     
     ctx.defineMethod(ctx.Fixnum, "<=>",
       function(ctx, self, args) {
-        if(self > args[0])
+        if (self > args[0])
           return 1;
-        else if(self == args[0])
+        else if (self == args[0])
           return 0;
-        if(self < args[0])
+        if (self < args[0])
           return -1;
       }
     );
@@ -693,6 +596,94 @@ RubyVM.addInitializer(function(ctx) {
   // Not implemented
   ctx.defineClass("Bignum", {"superClass": ctx.Integer});
 
+  ctx.defineClass("Float", {"superClass": ctx.Numeric});
+  {
+    
+    ctx.defineMethod(ctx.Float, "+",
+      function(ctx, self, args) {
+        return self + args[0];
+      }
+    );
+
+    ctx.defineMethod(ctx.Float, "-",
+      function(ctx, self, args) {
+        return self - args[0];
+      }
+    );
+
+    ctx.defineMethod(ctx.Float, "*",
+      function(ctx, self, args) {
+        return self * args[0];
+      }
+    );
+
+    ctx.defineMethod(ctx.Float, "/",
+      function(ctx, self, args) {
+        return self / args[0];
+      }
+    );
+    
+    ctx.defineMethod(ctx.Float, "%",
+      function(ctx, self, args) {
+        return self % args[0];
+      }
+    );
+    
+    ctx.defineMethod(ctx.Float, "<=>",
+      function(ctx, self, args) {
+        if (self > args[0])
+          return 1;
+        else if (self == args[0])
+          return 0;
+        if (self < args[0])
+          return -1;
+      }
+    );
+    
+    ctx.defineMethod(ctx.Float, "<",
+      function(ctx, self, args) {
+        return self < args[0];
+      }
+    );
+
+    ctx.defineMethod(ctx.Float, ">",
+      function(ctx, self, args) {
+        return self > args[0];
+      }
+    );
+    
+    ctx.defineMethod(ctx.Float, "<=",
+      function(ctx, self, args) {
+        return self <= args[0];
+      }
+    );
+
+    ctx.defineMethod(ctx.Float, ">=",
+      function(ctx, self, args) {
+        return self >= args[0];
+      }
+    );
+    
+    ctx.defineMethod(ctx.Float, "==",
+      function(ctx, self, args) {
+        return self == args[0];
+      }
+    );
+    
+    ctx.defineMethod(ctx.Float, "to_s",
+      function(ctx, self) {
+        return self.toString();
+      }
+    );
+
+    ctx.defineMethod(ctx.Float, "inspect",
+      function(ctx, self) {
+        return self.toString();
+      }
+    );
+    
+  }
+
   ctx.defineClass("String");
   {
     
@@ -704,7 +695,7 @@ RubyVM.addInitializer(function(ctx) {
     
     ctx.defineMethod(ctx.String, "dup",
       function(ctx, self) {
-        return ctx.newRubyString(self.value);
+        return ctx.newString(self.value);
       }
     );
     
@@ -747,7 +738,7 @@ RubyVM.addInitializer(function(ctx) {
     
     ctx.defineMethod(ctx.String, "__at__",
       function(ctx, self, args) {
-        return ctx.newRubyString(self.value[args[0]]);
+        return ctx.newString(self.value[args[0]]);
       }
     );
     
@@ -784,7 +775,7 @@ RubyVM.addInitializer(function(ctx) {
       function(ctx, self, args) {
         var pos = args[0];
         var len = args[1];
-        return ctx.newRubyString(self.value.substr(pos, len));
+        return ctx.newString(self.value.substr(pos, len));
       }
     );
     
@@ -825,8 +816,6 @@ RubyVM.addInitializer(function(ctx) {
       }
     );
     
-    // Methods used internally in lib/core/string.rb
-    
     ctx.defineClassMethod(ctx.String, "template",
       function(ctx, self, args) {
         var len = args[0];
@@ -835,7 +824,7 @@ RubyVM.addInitializer(function(ctx) {
         for (var i = 0; i < len; i += str.value.length) {
           res += str.value;
         }
-        return ctx.newRubyString(res.substr(0, len));
+        return ctx.newString(res.substr(0, len));
       }
     );
     
@@ -846,6 +835,8 @@ RubyVM.addInitializer(function(ctx) {
 
   ctx.defineClass("Regexp");
   {
+    
+    // Methods used internally in lib/core/regexp.rb
     
     ctx.defineMethod(ctx.Regexp, "search_region",
       function(ctx, self, args) {
@@ -860,9 +851,9 @@ RubyVM.addInitializer(function(ctx) {
         res.instanceVars = {
           "@source": str,
           "@regexp": self,
-          "@full": ctx.newRubyTuple([match.index, match.index + match[0].length]),
-          "@captures": ctx.newRubyArray(
-            match.slice(1).map(function(s){ return ctx.newRubyString(s); }))
+          "@full": ctx.newTuple([match.index, match.index + match[0].length]),
+          "@captures": ctx.newArray(
+            match.slice(1).map(function(s){ return ctx.newString(s); }))
         }
         return res;
       }
@@ -870,7 +861,7 @@ RubyVM.addInitializer(function(ctx) {
     
     ctx.defineClassMethod(ctx.Regexp, "__regexp_new__",
       function(ctx, self, args) {
-        return ctx.newRubyRegexp(args[0].value, args[1]);
+        return ctx.newRegexp(args[0].value, args[1]);
       }
     );
     
@@ -878,6 +869,7 @@ RubyVM.addInitializer(function(ctx) {
 
   ctx.defineClass("MatchData");
 
+  // Rubinius-specific class
   ctx.defineClass("Tuple");
   {
     
@@ -993,7 +985,7 @@ RubyVM.addInitializer(function(ctx) {
     ctx.defineMethod(ctx.IO, "write",
       function(ctx, self, args) {
         // For now, only supports console output.
-        ctx.printDebug(args[0].value);
+        ctx.printToConsole(args[0].value);
       }
     );
     
@@ -1011,10 +1003,10 @@ RubyVM.addInitializer(function(ctx) {
     
     ctx.defineMethod(ctx.MethodContext, "sender",
       function(ctx, self) {
-        var callerSF = self.stackFrame.callerStackFrame;
-        if (callerSF) {
+        var senderFrame = self.frame.senderFrame;
+        if (senderFrame) {
           var mc = ctx.newObject(ctx.MethodContext);
-          mc.stackFrame = ctx.getLocalStackFrame(callerSF);
+          mc.frame = ctx.getLocalFrame(senderFrame);
           return mc;
         } else {
           return null;
@@ -1024,28 +1016,28 @@ RubyVM.addInitializer(function(ctx) {
     
     ctx.defineMethod(ctx.MethodContext, "[]",
       function(ctx, self, args) {
-        if (!self.stackFrame.data) return null;
-        return self.stackFrame.data[args[0].value];
+        if (!self.frame.data) return null;
+        return self.frame.data[args[0].value];
       }
     );
     
     ctx.defineMethod(ctx.MethodContext, "[]=",
       function(ctx, self, args) {
-        if (!self.stackFrame.data) self.stackFrame.data = {};
-        self.stackFrame.data[args[0].value] = args[1];
+        if (!self.frame.data) self.frame.data = {};
+        self.frame.data[args[0].value] = args[1];
       }
     );
     
     ctx.defineMethod(ctx.MethodContext, "inspect",
       function(ctx, self) {
-        return "#<MethodContext:" + self.stackFrame.methodName + ">";
+        return "#<MethodContext:" + self.frame.methodName + ">";
       }
     );
     
     ctx.defineClassMethod(ctx.MethodContext, "current",
       function(ctx, self) {
         var mc = ctx.newObject(ctx.MethodContext);
-        mc.stackFrame = ctx.getLocalStackFrame(ctx.latestStackFrame);
+        mc.frame = ctx.getLocalFrame(ctx.currentFrame);
         return mc;
       }
     );
@@ -1077,19 +1069,19 @@ RubyVM.addInitializer(function(ctx) {
           if (obj == null || typeof(obj) == "boolean" || typeof(obj) == "number") {
             return obj;
           } else if (typeof(obj) == "string") {
-            return ctx.newRubyString(obj);
+            return ctx.newString(obj);
           } else if (typeof(obj) == "object" && obj instanceof Array) {
             var ary = new Array(obj.length);
             for (var i = 0; i < obj.length; ++i) {
               ary[i] = convert(obj[i]);
             }
-            return ctx.newRubyArray(ary);
+            return ctx.newArray(ary);
           } else {
             var ary = [];
             for (var k in obj) {
               ary.push(convert(k), convert(obj[k]));
             }
-            return ctx.newRubyHash(ary);
+            return ctx.newHash(ary);
           }
         }
         return convert(obj);
@@ -1128,6 +1120,7 @@ RubyVM.addInitializer(function(ctx) {
     
   }
 
+  // Class for HotRuby-specific methods
   ctx.defineClass("JS");
   {
     
@@ -1177,9 +1170,9 @@ RubyVM.addInitializer(function(ctx) {
     
   }
 
-  ctx.Object.constants["RUBY_PLATFORM"] = ctx.newRubyString("javascript-hotruby");
+  ctx.Object.constants["RUBY_PLATFORM"] = ctx.newString("javascript-hotruby");
 
-  // VM initializations which requires some RubyModule definitions.
+  // VM initializations which requires some Ruby class definitions.
   ctx.setGlobalVar("$native", ctx.newObject(ctx.NativeEnvironment));
   ctx.vm.topObject = ctx.newObject(ctx.Object);
   ctx.vm.checkEnv(ctx);
