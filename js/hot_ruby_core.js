@@ -302,23 +302,26 @@ RubyContext.prototype = {
     // Create Stack Frame
     var opcode = params.opcode;
     var frame = new RubyVM.Frame();
+    frame.type = params.type || "method";
     frame.fileName = opcode[6];
     frame.invokeClass = params.invokeClass;
-    frame.methodName = params.methodName;
     frame.self = params.self;
+    frame.methodName = params.methodName;
+    frame.block = params.block;
     frame.parentFrame = params.parentFrame;
     frame.senderFrame = me.currentFrame;
-    frame.isProc = params.isProc;
-    frame.isCatch = opcode[7] == "rescue";
-    frame.block = params.block;
-    if (frame.isCatch) {
+    if (frame.type == "catch") {
+      frame.dynamicFrame = params.parentFrame.dynamicFrame;
       frame.localVars = params.parentFrame.localVars;
     } else {
+      frame.dynamicFrame = frame;
       frame.localVars = new Array(opcode[4].local_size + 1);
     }
-    if (frame.isProc || frame.isCatch) {
+    if (frame.type == "block" || frame.type == "catch") {
+      frame.localFrame = params.parentFrame.localFrame;
       frame.cbase = params.parentFrame.cbase;
     } else {
+      frame.localFrame = frame;
       frame.cbase = opcode.cbase || me.Object;
     }
     frame.stack = new Array(opcode[4].stack_max);
@@ -338,7 +341,7 @@ RubyContext.prototype = {
       blockIndex = opcode[9][5];
     }
     var maxArgc = minArgc + labels.length - 1;
-    if (params.isProc && args.length == 1 && me.kindOf(args[0], me.Array) && minArgc > 1) {
+    if (frame.type == "block" && args.length == 1 && me.kindOf(args[0], me.Array) && minArgc > 1) {
       // Splat array args
       var ary = args.pop();
       var size = me.arraySize(ary);
@@ -346,7 +349,8 @@ RubyContext.prototype = {
         args.push(me.arrayAt(ary, i));
       }
     }
-    if (!params.isProc && (args.length < minArgc || (args.length > maxArgc && restIndex == -1))) {
+    if (frame.type == "method" &&
+        (args.length < minArgc || (args.length > maxArgc && restIndex == -1))) {
       return me.raise(me.ArgumentError,
         "wrong number of arguments (" + args.length + " for " + minArgc + ")",
         callback);
@@ -555,10 +559,10 @@ RubyContext.prototype = {
               frame.stack[frame.sp++] = value;
               break;
             case "setlocal" :
-              me.getLocalFrame(frame).localVars[cmd[1]] = frame.stack[--frame.sp];
+              frame.localFrame.localVars[cmd[1]] = frame.stack[--frame.sp];
               break;
             case "getlocal" :
-              frame.stack[frame.sp++] = me.getLocalFrame(frame).localVars[cmd[1]];
+              frame.stack[frame.sp++] = frame.localFrame.localVars[cmd[1]];
               break;
             case "setglobal" :
               me.vm.globalVars[cmd[1]] = frame.stack[--frame.sp];
@@ -566,11 +570,9 @@ RubyContext.prototype = {
             case "getglobal" :
               var val;
               if (cmd[1] == "$~") {
-                var lframe = me.getLocalFrame(frame);
-                val = lframe.data && lframe.data.last_match;
+                val = frame.localFrame.data && frame.localFrame.data.last_match;
               } else if (cmd[1] == "$_") {
-                var lframe = me.getLocalFrame(frame);
-                val = lframe.data && lframe.data.last_read_line;
+                val = frame.localFrame.data && frame.localFrame.data.last_read_line;
               } else {
                 val = me.vm.globalVars[cmd[1]];
               }
@@ -630,8 +632,7 @@ RubyContext.prototype = {
               var type = cmd[2];
               if (idx == 1 && (type == 77|| (type >= 2 && type <= 18 && type % 2 == 0))) {
                   // $&, $1, ...
-                var lframe = me.getLocalFrame(frame);
-                var lastMatch = lframe.data && lframe.data.last_match;
+                var lastMatch = frame.localFrame.data && frame.localFrame.data.last_match;
                 var val;
                 if (lastMatch) {
                   var n = (type == 77) ? 0 : type / 2;
@@ -717,12 +718,11 @@ RubyContext.prototype = {
             case "invokeblock" :
               var args = frame.stack.slice(frame.sp - cmd[1], frame.sp);
               frame.sp -= cmd[1];
-              var localFrame = me.getLocalFrame(frame);
-              if (!localFrame.block) {
+              if (!frame.localFrame.block) {
                 return me.raise(me.LocalJumpError, "no block given (yield)", bodyCallback);
               }
               me.invokeMethodAndPush({
-                receiver: localFrame.block,
+                receiver: frame.localFrame.block,
                 methodName: "yield",
                 args: args,
                 type: cmd[2]
@@ -805,15 +805,13 @@ RubyContext.prototype = {
                 case 1:
                   throwObj = me.newObject(me.ReturnException);
                   throwObj.value = val;
-                  throwObj.targetFrame = me.getLocalFrame(frame);
+                  throwObj.targetFrame = frame.localFrame;
                   break;
                 case 2:
-                  var dframe = frame;
-                  while (dframe.isCatch) dframe = frame.parentFrame;
-                  if (!dframe.isProc) me.fatal("unexpected break");
+                  if (frame.dynamicFrame.type != "block") me.fatal("unexpected break");
                   throwObj = me.newObject(me.BreakException);
                   throwObj.value = val;
-                  throwObj.targetFrame = dframe.parentFrame;
+                  throwObj.targetFrame = frame.dynamicFrame.parentFrame;
                   break;
                 default:
                   me.fatal("Unknown throw state: " + cmd[1]);
@@ -874,16 +872,6 @@ RubyContext.prototype = {
     //console.log(["handleException", ex, catchIndex]);
     var me = this;
     var deferred = false;
-    if (catchIndex == 0) {
-      var trace = me.getInstanceVar(ex, "@backtrace");
-      if (trace) {
-        var line = frame.fileName + ":" + frame.lineNo + ":in `" + frame.methodName + "'";
-        me.sendSync(trace, "push", [me.newString(line)]);
-      } else {
-        trace = me.newArray();
-        me.setInstanceVar(ex, "@backtrace", trace);
-      }
-    }
     frame.localVars[1] = ex; // $!
       // TODO: Looks like it is not always 1.
     for (var i = catchIndex; !deferred && i < frame.catchTable.length; ++i) {
@@ -901,7 +889,8 @@ RubyContext.prototype = {
             invokeClass: frame.invokeClass,
             methodName: frame.methodName,
             self: frame.self,
-            parentFrame: frame
+            parentFrame: frame,
+            type: "catch"
           }, function(res, ex) {
             if (me.vm.debug) console.log(["catch table <- ", nextIndex - 1, ex]);
             if (ex) {
@@ -1261,14 +1250,6 @@ RubyContext.prototype = {
     }
   },
   
-  getLocalFrame: function(frame) {
-    var me = this;
-    while (frame.isProc || frame.isCatch) {
-      frame = frame.parentFrame;
-    }
-    return frame;
-  },
-  
   // imported from rb_include_module()
   includeModule: function(klass, module) {
     var me = this;
@@ -1496,7 +1477,7 @@ RubyContext.prototype = {
           self: proc.parentFrame.self,
           args: me.arrayNativeToRuby(arguments),
           parentFrame: proc.parentFrame,
-          isProc: true
+          type: "block"
         }, function(res, ex) {
           if (ex) throw ex;
           result = res;
@@ -1731,7 +1712,7 @@ RubyContext.prototype = {
       args: args,
       block: block,
       parentFrame: proc.parentFrame,
-      isProc: true
+      type: "block"
     }, function(res, ex) {
         if (ex) return callback(null, ex);
         var frame = proc.parentFrame;
@@ -1760,7 +1741,7 @@ RubyContext.prototype = {
   
   blockGiven: function() {
     var me = this;
-    return me.getLocalFrame(me.currentFrame).block != null;
+    return me.currentFrame.localFrame.block != null;
   },
   
   // Async version of for (; cond(); increment()) { body(); }
@@ -1843,10 +1824,53 @@ RubyVM.VM_CALL_FCALL_BIT = 8;
 RubyVM.VM_CALL_VCALL_BIT = 16;
 
 /**
- * Frame
+ * Stack frame
  * @class
  * @construtor
  */
+
+/*
+  e.g.
+    
+    def hoge()
+      # frame1
+      yield()
+    end
+    
+    def foo()
+      # frame2
+      hoge() do
+        # frame3
+        begin
+          raise "foo"
+        rescue
+          # frame4
+        end
+      end
+    end
+    
+    frame1.type = "method"
+    frame2.type = "method"
+    frame3.type = "block"
+    frame4.type = "catch"
+    
+    frame4.senderFrame = frame3
+    frame3.senderFrame = frame1
+    frame1.senderFrame = frame2
+    
+    frame4.parentFrame = frame3
+    frame3.parentFrame = frame2
+    
+    frame1.localFrame = frame1
+    frame2.localFrame = frame2
+    frame3.localFrame = frame2
+    frame4.localFrame = frame2
+    
+    frame1.dynamicFrame = frame1
+    frame2.dynamicFrame = frame2
+    frame3.dynamicFrame = frame3
+    frame4.dynamicFrame = frame3
+*/
 RubyVM.Frame = function() {
   /** 
    * Stack Pointer
@@ -1889,20 +1913,38 @@ RubyVM.Frame = function() {
    */
   this.self = null;
   /** 
-   * Frame of scope enclosing this.
+   * Stack frame of scope enclosing this.
    * Valid for block and catch frame. null for others.
    * @type RubyVM.Frame 
    */
   this.parentFrame = null;
   /** 
-   * Frame which has invoked this.
-   * null if it has invoked from native (JavaScript) method.
+   * Stack frame which has invoked this.
    * @type RubyVM.Frame 
    */
   this.senderFrame = null;
   /** 
-   * Is Proc(Block)
-   * @type boolean 
+   * Stack frame of method which the frame belongs to. lfp in CRuby.
+   * @type RubyVM.Frame 
    */
-  this.isProc = false;
+  this.localFrame = null;
+  /** 
+   * Stack frame of most inner block which the frame belongs to. dfp in CRuby.
+   * @type RubyVM.Frame 
+   */
+  this.dynamicFrame = null;
+  /** 
+   * Type of stack frame (method, block, catch)
+   * @type string
+   */
+  this.type = null;
+};
+
+RubyVM.Frame.prototype = {
+  
+  toString: function() {
+    var me = this;
+    return "RubyVM.Frame:" + me.type + " " + me.methodName + " in " + me.fileName + ":" + me.lineNo;
+  }
+  
 };

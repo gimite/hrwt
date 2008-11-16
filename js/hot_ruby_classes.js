@@ -436,7 +436,7 @@ RubyVM.addInitializer(function(ctx) {
     ctx.defineMethod(ctx.Proc, "home",
       function(ctx, self) {
         var mc = ctx.newObject(ctx.MethodContext);
-        mc.frame = ctx.getLocalFrame(self.parentFrame);
+        mc.frame = self.parentFrame.localFrame;
         return mc;
       }
     );
@@ -992,12 +992,28 @@ RubyVM.addInitializer(function(ctx) {
   }
 
   ctx.defineClass("Exception");
+  {
+    
+    ctx.defineMethod(ctx.Exception, "__backtrace__",
+      function(ctx, self) {
+        var frame = ctx.getInstanceVar(self, "@context").frame;
+        var backtrace = [];
+        while (frame) {
+          backtrace.push(frame.fileName + ":" + frame.lineNo + ":in `" + frame.methodName + "'");
+          frame = frame.senderFrame;
+        }
+        return ctx.newArray(backtrace);
+      }
+    );
+    
+  }
 
   // Internally used
   ctx.defineClass("BreakException");
   ctx.defineClass("ReturnException");
 
   // Rubinius-specific class
+  // Note that so far it also represents BlockContext.
   ctx.defineClass("MethodContext");
   {
     
@@ -1006,7 +1022,7 @@ RubyVM.addInitializer(function(ctx) {
         var senderFrame = self.frame.senderFrame;
         if (senderFrame) {
           var mc = ctx.newObject(ctx.MethodContext);
-          mc.frame = ctx.getLocalFrame(senderFrame);
+          mc.frame = senderFrame.dynamicFrame;
           return mc;
         } else {
           return null;
@@ -1014,30 +1030,38 @@ RubyVM.addInitializer(function(ctx) {
       }
     );
     
+    ctx.defineMethod(ctx.MethodContext, "home",
+      function(ctx, self) {
+        var mc = ctx.newObject(ctx.MethodContext);
+        mc.frame = self.frame.dynamicFrame;
+        return mc;
+      }
+    );
+    
     ctx.defineMethod(ctx.MethodContext, "[]",
       function(ctx, self, args) {
-        if (!self.frame.data) return null;
-        return self.frame.data[args[0].value];
+        if (!self.frame.localFrame.data) return null;
+        return self.frame.localFrame.data[args[0].value];
       }
     );
     
     ctx.defineMethod(ctx.MethodContext, "[]=",
       function(ctx, self, args) {
-        if (!self.frame.data) self.frame.data = {};
-        self.frame.data[args[0].value] = args[1];
+        if (!self.frame.localFrame.data) self.frame.data = {};
+        self.frame.localFrame.data[args[0].value] = args[1];
       }
     );
     
     ctx.defineMethod(ctx.MethodContext, "inspect",
       function(ctx, self) {
-        return "#<MethodContext:" + self.frame.methodName + ">";
+        return "#<MethodContext:" + self.frame.type + " " + self.frame.methodName + ">";
       }
     );
     
     ctx.defineClassMethod(ctx.MethodContext, "current",
       function(ctx, self) {
         var mc = ctx.newObject(ctx.MethodContext);
-        mc.frame = ctx.getLocalFrame(ctx.currentFrame);
+        mc.frame = ctx.currentFrame.dynamicFrame;
         return mc;
       }
     );

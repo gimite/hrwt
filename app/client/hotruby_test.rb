@@ -307,6 +307,12 @@ end
 
 assert_equal(br_bar(), "bar", "return 1")
 
+# Regexp
+
+"hoge" =~ /h(.)/
+assert_equal($&, "ho", "regexp 1")
+assert_equal($1, "o", "regexp 2")
+
 # JSON
 
 hash = {"hoge"=>"foo", "bar"=>"boke"}

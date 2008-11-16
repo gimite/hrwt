@@ -138,7 +138,7 @@ module Kernel
     unless skip
       exc.context = MethodContext.current.sender unless exc.context
     end
-    Rubinius.asm(exc) { |e| e.bytecode(self); raise_exc }
+    __raise__(exc)
   end
   module_function :raise
 
