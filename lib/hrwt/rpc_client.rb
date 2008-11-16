@@ -3,7 +3,6 @@ JS.debug = false
 
 require "rubygems"
 require "mechanize"
-require "hrwt/js"
 require "hrwt/rpc_base"
 
 
@@ -38,7 +37,7 @@ class RPCClient
     end
     
     def http_post(uri, params)
-      if JS
+      if RUBY_PLATFORM == "javascript-hotruby"
         JS.http_request("POST", uri, params)
       else
         @agent ||= WWW::Mechanize.new()
