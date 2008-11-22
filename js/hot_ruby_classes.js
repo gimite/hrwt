@@ -2,7 +2,8 @@
 
 RubyVM.addInitializer(function(ctx) {
 
-  ctx.vm.Context.prototype.Object = ctx.defineClass("Object");
+  var Object = ctx.defineClass("Object");
+  ctx.setConstant(Object, "Object", Object);
   {
     
     ctx.defineMethod(ctx.Object, "initialize",
@@ -150,7 +151,7 @@ RubyVM.addInitializer(function(ctx) {
     // for debug
     ctx.defineMethod(ctx.Object, "__debug__",
       function(ctx, self, args) {
-        console.log(ctx.currentFrame);
+        console.log(ctx.currentFrame());
       }
     );
     
@@ -273,7 +274,6 @@ RubyVM.addInitializer(function(ctx) {
   }
 
   // Manually adds missing links between three classes above.
-  ctx.Object.constants.Object = ctx.Object;
   ctx.Object.rubyClass = ctx.Class;
   ctx.Object.singletonClass.rubyClass = ctx.Class;
   ctx.Object.singletonClass.superClass = ctx.Class;
@@ -1047,7 +1047,7 @@ RubyVM.addInitializer(function(ctx) {
     
     ctx.defineMethod(ctx.MethodContext, "[]=",
       function(ctx, self, args) {
-        if (!self.frame.localFrame.data) self.frame.data = {};
+        if (!self.frame.localFrame.data) self.frame.localFrame.data = {};
         self.frame.localFrame.data[args[0].value] = args[1];
       }
     );
@@ -1061,7 +1061,7 @@ RubyVM.addInitializer(function(ctx) {
     ctx.defineClassMethod(ctx.MethodContext, "current",
       function(ctx, self) {
         var mc = ctx.newObject(ctx.MethodContext);
-        mc.frame = ctx.currentFrame.dynamicFrame;
+        mc.frame = ctx.currentFrame().dynamicFrame;
         return mc;
       }
     );
@@ -1182,28 +1182,25 @@ RubyVM.addInitializer(function(ctx) {
     
     ctx.defineClassMethod(ctx.JS, "debug",
       function(ctx, self, args) {
-        return ctx.vm.debug;
+        return ctx.vm().debug;
       }
     );
     
     ctx.defineClassMethod(ctx.JS, "debug=",
       function(ctx, self, args) {
-        ctx.vm.debug = args[0];
+        ctx.vm().debug = args[0];
       }
     );
     
   }
 
-  ctx.Object.constants["RUBY_PLATFORM"] = ctx.newString("javascript-hotruby");
+  ctx.setConstant(ctx.Object, "RUBY_PLATFORM", ctx.newString("javascript-hotruby"));
 
-  // VM initializations which requires some Ruby class definitions.
-  ctx.setGlobalVar("$native", ctx.newObject(ctx.NativeEnvironment));
-  ctx.vm.topObject = ctx.newObject(ctx.Object);
-  ctx.vm.checkEnv(ctx);
+  ctx.vm().onClassesInitialized();
 
 });
 
 RubyVM.addAsyncInitializer(function(ctx, callback) {
   // Defines builtin classes written in Ruby.
-  ctx.vm.compileAndRun("builtin", callback);
+  ctx.vm().compileAndRun("builtin", callback);
 });

@@ -16,7 +16,7 @@ if (!this.console) {
 
 var RubyObject = function(ctx, klass) {
   if (!klass) ctx.fatal("klass is missing");
-  this.vm = ctx.vm;
+  this.vm_ = ctx.vm_;
   this.rubyClass = klass;
   this.instanceVars = {};
 };
@@ -28,30 +28,28 @@ RubyObject.prototype = {
 };
 
 var RubyClass = function(ctx, className, params) {
-  this.vm = ctx.vm;
+  this.vm_ = ctx.vm_;
   this.type = params.type;
   this.rubyClass = this.type == "module" ? ctx.Module : ctx.Class;
   this.superClass = this.type == "module" ? null : (params.superClass || ctx.Object || null);
-  this.methods = params.instanceMethods || {};
-  this.constants = params.constants || {};
+  this.methods = {};
+  for (var k in params.constants || {}) {
+    this[k] = params.constants[k];
+  }
   this.classVars = params.classVars || {};
   this.instanceVars = params.instanceVars || {};
   this.included = params.included || [];
   if (this.type != "singleton") {
     this.singletonClass = new RubyClass(ctx, null, {
       superClass: this.superClass ? this.superClass.singletonClass : this.rubyClass,
-      type: "singleton",
-      instanceMethods: params.classMethods || {}
+      type: "singleton"
     });
   }
   if (this.type != "singleton" && className && ctx.Object) {
     this.upperClass = params.upperClass || ctx.Object;
-    this.upperClass.constants[className] = this;
+    ctx.setConstant(this.upperClass, className, this);
     if (this.upperClass == ctx.Object) {
       this.name = className;
-      // Adds it to prototype of context object so that we can access Ruby class Hoge by
-      // ctx.Hoge for convenience.
-      this.vm.Context.prototype[className] = this;
     } else {
       this.name = this.upperClass.name ? this.upperClass.name + "::" + className : null;
     }
@@ -74,31 +72,33 @@ RubyClass.prototype = {
 var RubyVM = function(params) {
   var me = this;
   params = params || {};
-  me.compilerUrl = params.compilerUrl || "compile";
-  me.consoleElement = params.consoleElement;
+  me.compilerUrl_ = params.compilerUrl || "compile";
+  me.consoleElement_ = params.consoleElement;
   /** 
    * Global Variables
    * @type Object 
    */
-  me.globalVars = {};
+  me.globalVars_ = {};
   /** 
    * END blocks
    * @type Array 
    */
-  me.endBlocks = [];
+  me.endBlocks_ = [];
   /**
    * Running Enviornment
    * @type String
    */
-  me.env = "browser";
-  me.topObject = null;
-  me.topFrame = null;
+  me.env_ = null;
+  me.topObject_ = null;
+  me.topFrame_ = null;
   
-  me.loaded = false;
-  me.onLoaded = [];
+  me.loaded_ = false;
+  me.onLoaded_ = [];
   
+  me.checkEnv_();
+
   me.Context = function() {
-    this.vm = me;
+    this.vm_ = me;
   };
   me.Context.prototype = new RubyContext();
   
@@ -113,8 +113,8 @@ var RubyVM = function(params) {
     },
     function(res, ex) {
       if (ex) return;
-      me.loaded = true;
-      me.onLoaded.each(function(handler) {
+      me.loaded_ = true;
+      me.onLoaded_.each(function(handler) {
         handler();
       });
     }
@@ -152,7 +152,7 @@ RubyVM.prototype = {
     } else if (source.url) {
       url = source.url;
     } else if (source.script) {
-      url = me.compilerUrl;
+      url = me.compilerUrl_;
       params["src"] = source.script;
     } else {
       throw "Unknown source";
@@ -175,9 +175,9 @@ RubyVM.prototype = {
               callback();
             } else {
               var opcodes = eval("(" + response.responseText + ")");
-              if (!me.loaded && source != "builtin") {
-                // Waits until builtin classes are loaded.
-                me.onLoaded.push(function() {
+              if (!me.loaded_ && source != "builtin") {
+                // Waits until builtin classes are loaded_.
+                me.onLoaded_.push(function() {
                   ctx.runOpcodes(opcodes, callback);
                 });
               } else {
@@ -205,36 +205,41 @@ RubyVM.prototype = {
   },
   
   /**
-   * Check whether the environment is Flash, Browser or Console (SpiderMonkey or Rhino).
+   * VM initializations which requires some Ruby class definitions.
    */
-  checkEnv : function(ctx) {
+  onClassesInitialized: function() {
     var me = this;
-    if (typeof(_root) != "undefined") {
-      me.env = "flash";
-      // Create debug text field
-      RubyVM.debugTextField = new TextField();
-      RubyVM.debugTextField.autoSize = TextFieldAutoSize.LEFT;
-      _root.addChild(RubyVM.debugTextField);
-      // Define alert
-      alert = function(str) {
-        RubyVM.debugTextField.text += str + "\n";
-      }
-      me.nativeClassObjCache = {};
-      me.asPackages = [""];
+    var ctx = new me.Context();
+    me.topObject_ = ctx.newObject(ctx.Object);
+    var native = ctx.newObject(ctx.NativeEnvironment);
+    ctx.setGlobalVar("$native", native);
+    if (me.env_ == "flash") {
       // Create _root NativeObject
       var obj = ctx.newObject(ctx.NativeObject);
       obj.value = _root;
-      me.globalVars.$native.instanceVars._root = obj;
+      ctx.setInstanceVar(native, "_root", obj);
+    }
+  },
+  
+  /**
+   * Check whether the environment is Flash, Browser or console (SpiderMonkey or Rhino).
+   */
+  checkEnv_ : function() {
+    var me = this;
+    if (typeof(_root) != "undefined") {
+      me.env_ = "flash";
+      // Create debug text field
+      me.debugTextField = new TextField();
+      me.debugTextField.autoSize = TextFieldAutoSize.LEFT;
+      _root.addChild(me.debugTextField);
+      me.nativeClassObjCache = {};
+      me.asPackages = [""];
     } else if (typeof(window) != "undefined") {
-      me.env = "browser";
+      me.env_ = "browser";
     } else if (typeof(print) != "undefined") {
-      me.env = "console";
-      // Define alert
-      alert = function(str) {
-        print(str);
-      }
+      me.env_ = "console";
     } else {
-      ctx.fatal("Unknown environment");
+      console.error("Unknown environment");
     }
   },
   
@@ -248,9 +253,19 @@ RubyContext = function() {};
 
 RubyContext.prototype = {
   
+  vm: function() {
+    var me = this;
+    return me.vm_;
+  },
+  
+  currentFrame: function() {
+    var me = this;
+    return me.currentFrame_;
+  },
+  
   newContext: function() {
     var me = this;
-    return new me.vm.Context();
+    return new me.vm_.Context();
   },
   
   runOpcodes: function(opcodes, callback) {
@@ -260,11 +275,11 @@ RubyContext.prototype = {
       function() { return i < opcodes.length; },
       function() { ++i; },
       function(bodyCallback) {
-        me.runOpcode({
+        me.runOpcode_({
           opcode: opcodes[i],
           invokeClass: me.Object,
           methodName: "<main>",
-          self: me.vm.topObject
+          self: me.vm_.topObject_
         }, function(res, ex) {
           if (ex) {
             console.error("Error: ", ex);
@@ -295,9 +310,9 @@ RubyContext.prototype = {
    * @param {function} callback
    * @private
    */
-  runOpcode : function(params, callback) {
+  runOpcode_ : function(params, callback) {
     var me = this;
-    //if (me.vm.debug) console.log("runOpcode", params);
+    //if (me.vm_.debug) console.log("runOpcode_", params);
     
     // Create Stack Frame
     var opcode = params.opcode;
@@ -309,7 +324,7 @@ RubyContext.prototype = {
     frame.methodName = params.methodName;
     frame.block = params.block;
     frame.parentFrame = params.parentFrame;
-    frame.senderFrame = me.currentFrame;
+    frame.senderFrame = me.currentFrame_;
     if (frame.type == "catch") {
       frame.dynamicFrame = params.parentFrame.dynamicFrame;
       frame.localVars = params.parentFrame.localVars;
@@ -369,14 +384,14 @@ RubyContext.prototype = {
     }
     var startLabel = labels[normalArgc - minArgc];
     
-    var prevFrame = me.currentFrame;
-    me.currentFrame = frame;
-    if (me.vm.topFrame == null) me.vm.topFrame = frame;
+    var prevFrame = me.currentFrame_;
+    me.currentFrame_ = frame;
+    if (me.vm_.topFrame_ == null) me.vm_.topFrame_ = frame;
     
     // Run the mainLoop
-    me.mainLoop(opcode[11], startLabel, function(res, ex) {
+    me.mainLoop_(opcode[11], startLabel, function(res, ex) {
       
-      me.currentFrame = prevFrame;
+      me.currentFrame_ = prevFrame;
       
       if (ex) return callback(null, ex);
       
@@ -386,15 +401,15 @@ RubyContext.prototype = {
           params.parentFrame.stack[params.parentFrame.sp++] = frame.stack[i];
         }
       }
-      if (frame == me.vm.topFrame && me.vm.endBlocks.length > 0) {
+      if (frame == me.vm_.topFrame_ && me.vm_.endBlocks_.length > 0) {
         // Runs END blocks.
         // TODO: Make it Proc so that end block can access local variables of
         //       the method it was specified.
-        me.runOpcode({
-          opcode: me.vm.endBlocks.pop(),
+        me.runOpcode_({
+          opcode: me.vm_.endBlocks_.pop(),
           invokeClass: me.Object,
           methodName: "<end block>",
-          self: me.vm.topObject
+          self: me.vm_.topObject_
         }, callback);
         return;
       }
@@ -409,7 +424,7 @@ RubyContext.prototype = {
    * @param {RubyVM.Frame} frame
    * @private
    */
-  mainLoop : function(opcode, startLabel, callback) {
+  mainLoop_ : function(opcode, startLabel, callback) {
     var me = this;
 
     // Create label to ip
@@ -425,7 +440,7 @@ RubyContext.prototype = {
       }
     }
     
-    var frame = me.currentFrame;
+    var frame = me.currentFrame_;
     var ip = startLabel ? opcode.label2ip[startLabel] : 0;
     
     me.loopAsync(
@@ -439,7 +454,7 @@ RubyContext.prototype = {
         // Get the next command
         var cmd = opcode[ip];
         
-        // if (me.vm.debug) console.log(["ip", ip].concat(cmd));
+        // if (me.vm_.debug) console.log(["ip", ip].concat(cmd));
         // If "cmd" is a Number then it is the line number.
         if (typeof(cmd) == "number") frame.lineNo = cmd;
         
@@ -486,7 +501,7 @@ RubyContext.prototype = {
               break;
             case "putobject" :
               var node = cmd[1];
-              frame.stack[frame.sp++] = me.deserializeObject(node);
+              frame.stack[frame.sp++] = me.deserializeObject_(node);
               break;
             case "putstring" :
               frame.stack[frame.sp++] = me.newString(cmd[1]);
@@ -541,7 +556,7 @@ RubyContext.prototype = {
               break;
             case "splatarray" :
               var obj = frame.stack[--frame.sp];
-              me.invokeMethodAndPush({
+              me.invokeMethodAndPush_({
                 receiver: me.InstructionHelper,
                 methodName: "splat_array",
                 args: [obj]
@@ -565,7 +580,7 @@ RubyContext.prototype = {
               frame.stack[frame.sp++] = frame.localFrame.localVars[cmd[1]];
               break;
             case "setglobal" :
-              me.vm.globalVars[cmd[1]] = frame.stack[--frame.sp];
+              me.vm_.globalVars_[cmd[1]] = frame.stack[--frame.sp];
               break;
             case "getglobal" :
               var val;
@@ -574,7 +589,7 @@ RubyContext.prototype = {
               } else if (cmd[1] == "$_") {
                 val = frame.localFrame.data && frame.localFrame.data.last_read_line;
               } else {
-                val = me.vm.globalVars[cmd[1]];
+                val = me.vm_.globalVars_[cmd[1]];
               }
               frame.stack[frame.sp++] = val;
               break;
@@ -688,7 +703,7 @@ RubyContext.prototype = {
               }
               if (block instanceof Array)
                 block = me.newProc(block, frame);
-              me.invokeMethodAndPush({
+              me.invokeMethodAndPush_({
                 receiver: receiver,
                 methodName: cmd[1],
                 args: args,
@@ -705,7 +720,7 @@ RubyContext.prototype = {
               var autoPassAllArgs = frame.stack[--frame.sp];
               if (block instanceof Array)
                 block = me.newProc(block, frame);
-              me.invokeMethodAndPush({
+              me.invokeMethodAndPush_({
                 receiver: frame.self,
                 methodName: frame.methodName,
                 args: args,
@@ -721,7 +736,7 @@ RubyContext.prototype = {
               if (!frame.localFrame.block) {
                 return me.raise(me.LocalJumpError, "no block given (yield)", bodyCallback);
               }
-              me.invokeMethodAndPush({
+              me.invokeMethodAndPush_({
                 receiver: frame.localFrame.block,
                 methodName: "yield",
                 args: args,
@@ -763,7 +778,7 @@ RubyContext.prototype = {
                 }
                 cmd[2].cbase = newClass;
                 // Run the class definition
-                me.runOpcode({
+                me.runOpcode_({
                   opcode: cmd[2],
                   invokeClass: newClass,
                   methodName: "<class:" + newClass.name + ">",
@@ -778,7 +793,7 @@ RubyContext.prototype = {
                 var singletonClass = me.getSingletonClass(cbaseObj);
                 cmd[2].cbase = singletonClass;
                 // Run the class definition
-                me.runOpcode({
+                me.runOpcode_({
                   opcode: cmd[2],
                   invokeClass: singletonClass,
                   methodName: "<singleton class>",
@@ -789,7 +804,7 @@ RubyContext.prototype = {
               }
               break;
             case "postexe" :
-              me.vm.endBlocks.push(cmd[1]);
+              me.vm_.endBlocks_.push(cmd[1]);
               break;
             case "throw" :
               // See: vm_insnhelper.c: vm_throw()
@@ -828,7 +843,7 @@ RubyContext.prototype = {
               frame.stack[frame.sp++] = null;
               break;
             default :
-              me.fatal("[mainLoop] Unknown opcode : " + cmd[0]);
+              me.fatal("[mainLoop_] Unknown opcode : " + cmd[0]);
           }
         }
         bodyCallback();
@@ -837,7 +852,7 @@ RubyContext.prototype = {
       // After the loop finished
       function(res, ex) {
         if (ex) {
-          me.handleException(opcode, frame, ip, ex, 0, callback);
+          me.handleException_(opcode, frame, ip, ex, 0, callback);
         } else {
           callback(res, ex);
         }
@@ -846,7 +861,7 @@ RubyContext.prototype = {
     );
   },
   
-  deserializeObject: function(node) {
+  deserializeObject_: function(node) {
     var me = this;
     if (typeof(node) == "object") {
       if (node.type == "symbol") {
@@ -855,7 +870,7 @@ RubyContext.prototype = {
         return me.newRegexp(node.source, node.options);
       } else if (node.type == "range") {
         return me.newRange(
-          me.deserializeObject(node.begin), me.deserializeObject(node.end), node.exclude_end);
+          me.deserializeObject_(node.begin), me.deserializeObject_(node.end), node.exclude_end);
       } else if (node.type == "constant") {
         return me.getConstant(me.Object, node.name);
       } else {
@@ -868,8 +883,8 @@ RubyContext.prototype = {
     }
   },
   
-  handleException: function(opcode, frame, ip, ex, catchIndex, callback) {
-    //console.log(["handleException", ex, catchIndex]);
+  handleException_: function(opcode, frame, ip, ex, catchIndex, callback) {
+    //console.log(["handleException_", ex, catchIndex]);
     var me = this;
     var deferred = false;
     frame.localVars[1] = ex; // $!
@@ -883,8 +898,8 @@ RubyContext.prototype = {
         var contLabel = frame.catchTable[i][4];
         var nextIndex = i + 1;
         if (catchType == "rescue" && ip >= start && ip < end) {
-          if (me.vm.debug) console.log(["catch table -> ", nextIndex - 1, ex]);
-          me.runOpcode({
+          if (me.vm_.debug) console.log(["catch table -> ", nextIndex - 1, ex]);
+          me.runOpcode_({
             opcode: catchOpcode,
             invokeClass: frame.invokeClass,
             methodName: frame.methodName,
@@ -892,11 +907,11 @@ RubyContext.prototype = {
             parentFrame: frame,
             type: "catch"
           }, function(res, ex) {
-            if (me.vm.debug) console.log(["catch table <- ", nextIndex - 1, ex]);
+            if (me.vm_.debug) console.log(["catch table <- ", nextIndex - 1, ex]);
             if (ex) {
-              me.handleException(opcode, frame, ip, ex, nextIndex, callback);
+              me.handleException_(opcode, frame, ip, ex, nextIndex, callback);
             } else {
-              me.mainLoop(opcode, contLabel, callback);
+              me.mainLoop_(opcode, contLabel, callback);
             }
           });
           deferred = true;
@@ -914,10 +929,10 @@ RubyContext.prototype = {
     }
   },
   
-  invokeMethodAndPush: function(params, callback) {
+  invokeMethodAndPush_: function(params, callback) {
     var me = this;
-    var frame = me.currentFrame;
-    me.invokeMethod(params, function(res, ex) {
+    var frame = me.currentFrame_;
+    me.invokeMethod_(params, function(res, ex) {
       if (ex) {
         if (me.classOf(ex) == me.BreakException && ex.targetFrame == frame) {
           res = ex.value;
@@ -941,20 +956,20 @@ RubyContext.prototype = {
    * @param {boolean} params.klass Base point class used for super
    * @param {function} callback
    */
-  invokeMethod : function(params, callback) {
+  invokeMethod_ : function(params, callback) {
     var me = this;
     var receiverClass = me.classOf(params.receiver);
     
-    if (me.vm.debug) {
-      console.log("invokeMethod ->",
+    if (me.vm_.debug) {
+      console.log("invokeMethod_ ->",
         params.receiver, params.methodName, params.args, params.block, params.super);
       var origCallback = callback;
       callback = function(res, ex) {
         if (ex) {
-          console.log("invokeMethod <- exception", ex);
+          console.log("invokeMethod_ <- exception", ex);
           return origCallback(null, ex);
         }
-        console.log("invokeMethod <-", res);
+        console.log("invokeMethod_ <-", res);
         origCallback(res);
       }
     }
@@ -970,7 +985,7 @@ RubyContext.prototype = {
     }
     
     // Invokes host method if appropriate
-    var res = me.invokeNative(params.receiver, params.methodName, args, receiverClass);
+    var res = me.invokeNative_(params.receiver, params.methodName, args, receiverClass);
     if (res) return callback(res.result);
     
     if (!receiverClass) {
@@ -994,7 +1009,7 @@ RubyContext.prototype = {
     if (func == null) {
       if (params.methodName != "method_missing") {
         var newArgs = [me.intern(params.methodName)].concat(args);
-        me.invokeMethod({
+        me.invokeMethod_({
           receiver: params.receiver,
           methodName: "method_missing",
           args: newArgs,
@@ -1021,7 +1036,7 @@ RubyContext.prototype = {
         }
         break;
       case "object" :
-        me.runOpcode({
+        me.runOpcode_({
           opcode: func,
           invokeClass: invokeClass,
           methodName: params.methodName,
@@ -1031,7 +1046,7 @@ RubyContext.prototype = {
         }, callback);
         return;
       default :
-        me.fatal("[invokeMethod] Unknown function type : " + typeof(func));
+        me.fatal("[invokeMethod_] Unknown function type : " + typeof(func));
     }
     
   },
@@ -1051,21 +1066,21 @@ RubyContext.prototype = {
   /**
    * Invoke native routine
    */
-  invokeNative: function(receiver, methodName, args, receiverClass) {
+  invokeNative_: function(receiver, methodName, args, receiverClass) {
     var me = this;
     var res;
     switch(receiverClass) {
       case me.NativeEnvironment:
-        res = me.getNativeEnvVar(receiver, methodName, args);
+        res = me.getNativeEnvVar_(receiver, methodName, args);
         break;
       case me.NativeObject:
-        res = me.invokeNativeMethod(receiver, methodName, args);
+        res = me.invokeNativeMethod_(receiver, methodName, args);
         break;
       case me.NativeClass:
         if (methodName == "new") {
-          res = me.invokeNativeNew(receiver, methodName, args);
+          res = me.invokeNativeNew_(receiver, methodName, args);
         } else {
-          res = me.invokeNativeMethod(receiver, methodName, args);
+          res = me.invokeNativeMethod_(receiver, methodName, args);
         }
         break;
       default:
@@ -1077,14 +1092,14 @@ RubyContext.prototype = {
   /**
    * Get variable from NativeEnvironment
    */
-  getNativeEnvVar: function(receiver, varName, args) {
+  getNativeEnvVar_: function(receiver, varName, args) {
     var me = this;
     //trace(varName);
-    if (me.vm.env == "flash" && varName == "import") {
+    if (me.vm_.env_ == "flash" && varName == "import") {
       var imp = args[0].value;
       if (imp.charAt(imp.length - 1) != "*")
-        me.fatal("[getNativeEnvVar] Param must ends with * : " + imp);
-      me.vm.asPackages.push(imp.substr(0, imp.length - 1));
+        me.fatal("[getNativeEnvVar_] Param must ends with * : " + imp);
+      me.vm_.asPackages.push(imp.substr(0, imp.length - 1));
       return null;
     }
     
@@ -1092,7 +1107,7 @@ RubyContext.prototype = {
       return receiver.instanceVars[varName];
     }
     
-    if (me.vm.env == "browser" || me.vm.env == "console") {
+    if (me.vm_.env_ == "browser" || me.vm_.env_ == "console") {
       // Get native global variable
       var v = eval("(" + varName + ")");
       if (typeof(v) != "undefined") {
@@ -1106,23 +1121,23 @@ RubyContext.prototype = {
           return obj;
         }
       }
-    } else if (me.vm.env == "flash") {
+    } else if (me.vm_.env_ == "flash") {
       // Get NativeClass Object
       var klass;
-      if (varName in me.vm.nativeClassObjCache) {
-        klass = me.vm.nativeClassObjCache[varName];
+      if (varName in me.vm_.nativeClassObjCache) {
+        klass = me.vm_.nativeClassObjCache[varName];
       } else {
-        for(var i=0; i<me.vm.asPackages.length; i++) {
+        for(var i=0; i<me.vm_.asPackages.length; i++) {
           try {
-            klass = getDefinitionByName(me.vm.asPackages[i] + varName);
+            klass = getDefinitionByName(me.vm_.asPackages[i] + varName);
             break;
           } catch(e) {
           }
         }
         if (klass == null) {
-          me.fatal("[getNativeEnvVar] Cannot find class: " + varName);
+          me.fatal("[getNativeEnvVar_] Cannot find class: " + varName);
         }
-        me.vm.nativeClassObjCache[varName] = klass;
+        me.vm_.nativeClassObjCache[varName] = klass;
       }
       return {
         className : "NativeClass",
@@ -1130,16 +1145,16 @@ RubyContext.prototype = {
       }
     }
     
-    me.fatal("[getNativeEnvVar] Cannot get the value variable: " + varName);
+    me.fatal("[getNativeEnvVar_] Cannot get the value variable: " + varName);
   },
   
   /**
    * Invoke value method or get value instance variable
    */
-  invokeNativeMethod: function(receiver, methodName, args) {
+  invokeNativeMethod_: function(receiver, methodName, args) {
     var me = this;
     // Split methodName and operator
-    var op = me.getOperator(methodName);
+    var op = me.getOperator_(methodName);
     if (op != null) {
       methodName = methodName.substr(0, methodName.length - op.length);
     }
@@ -1148,7 +1163,7 @@ RubyContext.prototype = {
     if (typeof(receiver.value[methodName]) == "function") {
       // Invoke native method
       if (op != null)
-        me.fatal("[invokeNativeMethod] Unsupported operator: " + op);
+        me.fatal("[invokeNativeMethod_] Unsupported operator: " + op);
       var convArgs = me.arrayRubyToNative(args);
       ret = receiver.value[methodName].apply(receiver.value, convArgs);
     } else {
@@ -1161,7 +1176,7 @@ RubyContext.prototype = {
             ret = receiver.value[methodName] = me.toNative(args[0]);
             break;
           default:
-            me.fatal("[invokeNativeMethod] Unsupported operator: " + op);
+            me.fatal("[invokeNativeMethod_] Unsupported operator: " + op);
         }
       }
     }
@@ -1171,7 +1186,7 @@ RubyContext.prototype = {
   /**
    * Invoke native "new", and create value instance.
    */
-  invokeNativeNew: function(receiver, methodName, args) {
+  invokeNativeNew_: function(receiver, methodName, args) {
     var me = this;
     var obj;
     var args = me.arrayRubyToNative(args);
@@ -1186,7 +1201,7 @@ RubyContext.prototype = {
       case 7: obj = new receiver.value(args[0], args[1], args[2], args[3], args[4], args[5], args[6]); break;
       case 8: obj = new receiver.value(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]); break;
       case 9: obj = new receiver.value(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8]); break;
-      default: me.fatal("[invokeNativeNew] Too much arguments: " + args.length);
+      default: me.fatal("[invokeNativeNew_] Too much arguments: " + args.length);
     }
     var result = me.newObject(me.NativeObject);
     result.value = obj;
@@ -1197,11 +1212,11 @@ RubyContext.prototype = {
    * Set the Constant
    * @param {Object} klass
    * @param {String} constName
-   * @param constValue
-   * @param {RubyVM.Frame} frame
+   * @param value
+   * @param {RubyVM.Frame} frame cbase of this frame is used when klass is null
    * @private
    */
-  setConstant : function(klass, constName, constValue, frame) {
+  setConstant : function(klass, constName, value, frame) {
     var me = this;
     if (klass == null) {
       klass = frame.cbase;
@@ -1209,14 +1224,19 @@ RubyContext.prototype = {
       // TODO
       me.fatal("[setConstant] Not implemented");
     }
-    klass.constants[constName] = constValue;
+    klass[constName] = value;
+    if (!me.Object || klass == me.Object) {
+      // Adds it to prototype of context object so that we can access Ruby constant Hoge by
+      // ctx.Hoge for convenience.
+      me.vm_.Context.prototype[constName] = value;
+    }
   },
   
   /**
    * Get the constant
    * @param {Object} klass
    * @param {String} constName
-   * @param {RubyVM.Frame} frame
+   * @param {RubyVM.Frame} frame base point of lookup when klass is null
    * @private
    */
   getConstant : function(klass, constName, frame) {
@@ -1225,7 +1245,7 @@ RubyContext.prototype = {
       var isFound = false;
       // Search cbase and its parents
       for (klass = frame.cbase; klass; ) {
-        if (constName in klass.constants) {
+        if (constName in klass) {
           isFound = true;
           break;
         }
@@ -1234,7 +1254,7 @@ RubyContext.prototype = {
       // Search super classes
       if (!isFound) {
         for (klass = frame.invokeClass; klass && klass != me.Object; ) {
-          if (constName in klass.constants) {
+          if (constName in klass) {
             isFound = true;
             break;
           }
@@ -1242,8 +1262,8 @@ RubyContext.prototype = {
         }
       }
     }
-    if (klass && constName in klass.constants) {
-      var res = klass.constants[constName];
+    if (klass && constName in klass) {
+      var res = klass[constName];
       return res == null ? null : res; // Converts undefined to null
     } else {
       return; // Returns undefined
@@ -1274,23 +1294,7 @@ RubyContext.prototype = {
     }
   },
   
-  /**
-   * Search <script type="text/ruby"></script> and run.
-   * @param {String} url Ruby compiler url
-   */
-  runFromScriptTag : function(url) {
-    var me = this;
-    var ary = document.getElementsByTagName("script");
-    for (var i=0; i < ary.length; i++) {
-      var hoge = ary[i].type;
-      if (ary[i].type == "text/ruby") {
-        me.compileAndRun({script: ary[i].text});
-        break;
-      }
-    }
-  },
-  
-  getOperator: function(str) {
+  getOperator_: function(str) {
     var me = this;
     var result = str.match(/[^\+\-\*\/%=]+([\+\-\*\/%]?=)/);
     if (result == null || result == false) {
@@ -1314,7 +1318,7 @@ RubyContext.prototype = {
         block = null;
       }
     }
-    me.invokeMethod({
+    me.invokeMethod_({
       receiver: receiver,
       methodName: methodName,
       args: args,
@@ -1326,7 +1330,7 @@ RubyContext.prototype = {
     var me = this;
     var done = false;
     var result;
-    me.invokeMethod({
+    me.invokeMethod_({
       receiver: receiver,
       methodName: methodName,
       args: args,
@@ -1470,7 +1474,7 @@ RubyContext.prototype = {
       var func = function() {
         var proc = arguments.callee.proc;
         var result;
-        me.runOpcode({
+        me.runOpcode_({
           opcode: proc.opcode,
           invokeClass: proc.parentFrame.invokeClass,
           methodName: proc.parentFrame.methodName,
@@ -1585,7 +1589,7 @@ RubyContext.prototype = {
     exp.opts = options;
     // Javascript "m" option allows "a\nb" matches /^b/, which is default in Ruby.
     var flags = "mg";
-    if (exp.opts & me.Regexp.constants.IGNORECASE) flags += "i";
+    if (exp.opts & me.Regexp.IGNORECASE) flags += "i";
     exp.exp = new RegExp(source, flags);
     return exp;
   },
@@ -1704,7 +1708,7 @@ RubyContext.prototype = {
   
   callProc: function(proc, args, block, callback) {
     var me = this;
-    me.runOpcode({
+    me.runOpcode_({
       opcode: proc.opcode,
       invokeClass: proc.parentFrame.invokeClass,
       methodName: proc.parentFrame.methodName,
@@ -1723,12 +1727,12 @@ RubyContext.prototype = {
   
   getGlobalVar: function(name) {
     var me = this;
-    return me.vm.globalVars[name];
+    return me.vm_.globalVars_[name];
   },
   
   setGlobalVar: function(name, value) {
     var me = this;
-    me.vm.globalVars[name] = value;
+    me.vm_.globalVars_[name] = value;
   },
   
   raise: function(klass, message, callback) {
@@ -1741,7 +1745,7 @@ RubyContext.prototype = {
   
   blockGiven: function() {
     var me = this;
-    return me.currentFrame.localFrame.block != null;
+    return me.currentFrame_.localFrame.block != null;
   },
   
   // Async version of for (; cond(); increment()) { body(); }
@@ -1775,9 +1779,9 @@ RubyContext.prototype = {
    */
   printToConsole : function(str) {
     var me = this;
-    switch(me.vm.env) {
+    switch(me.vm_.env_) {
       case "browser":
-        var out = me.vm.consoleElement;
+        var out = me.vm_.consoleElement_;
         if (out) {
           str = str.replace(/ /g, "\u00a0"); // " " -> "&nbsp;"
           str.split(/(\n)/).each(function(piece) {
@@ -1789,7 +1793,7 @@ RubyContext.prototype = {
         }
         break;
       case "flash":
-        RubyVM.debugTextField.text += str;
+        me.debugTextField.text += str;
         break;
       case "console":
         print(str);
@@ -1888,8 +1892,8 @@ RubyVM.Frame = function() {
    */
   this.stack = [];
   /** 
-   * Current class to define methods
-   * @type Object 
+   * Current class to define methods, lookup constants, etc.
+   * @type RubyClass
    */
   this.cbase = null;
   /** 
