@@ -44,6 +44,13 @@ Dir["app/client/*.rb"].each() do |path|
   server.mount_proc("/iseq/#{file_name}") do |req, res|
     compile(File.read(path), req, res)
   end
+  if !File.exist?("app/client/#{file_name}.html")
+    server.mount_proc("/#{file_name}") do |req, res|
+      res["Content-Type"] = "text/html"
+      template = File.read("etc/hrwt/client.rhtml")
+      res.body = ERB.new(template, nil, "<>").result(binding)
+    end
+  end
 end
 
 Dir["app/client/*.html"].each() do |path|

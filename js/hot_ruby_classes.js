@@ -816,6 +816,18 @@ RubyVM.addInitializer(function(ctx) {
       }
     );
     
+    ctx.defineMethod(ctx.String, "tolower",
+      function(ctx, self) {
+        return self.value.toLowerCase();
+      }
+    );
+    
+    ctx.defineMethod(ctx.String, "toupper",
+      function(ctx, self) {
+        return self.value.toUpperCase();
+      }
+    );
+    
     ctx.defineClassMethod(ctx.String, "template",
       function(ctx, self, args) {
         var len = args[0];
@@ -1194,6 +1206,166 @@ RubyVM.addInitializer(function(ctx) {
     
   }
 
+  // HotRuby-specific class
+  ctx.defineModule("Tag");
+  {
+    
+    ctx.defineClassMethod(ctx.Tag, "body",
+      function(ctx, self, args) {
+        var elem = ctx.newObject(ctx.Tag.Element);
+        elem.element = document.body;
+        return elem;
+      }
+    );
+    
+    ctx.defineClassMethod(ctx.Tag, "title",
+      function(ctx, self, args) {
+        return document.title;
+      }
+    );
+    
+    ctx.defineClassMethod(ctx.Tag, "title=",
+      function(ctx, self, args) {
+        var title = args[0].value;
+        document.title = title;
+      }
+    );
+    
+    ctx.defineClass("Element", {upperClass: ctx.Tag});
+    {
+      
+      ctx.defineMethod(ctx.Tag.Element, "initialize",
+        function(ctx, self, args) {
+          var tagName = args[0].value;
+          self.element = document.createElement(tagName);
+        }
+      );
+      
+      ctx.defineMethod(ctx.Tag.Element, "append_child",
+        function(ctx, self, args) {
+          var child = args[0];
+          var childElem;
+          if (ctx.kindOf(child, ctx.Tag.Element)) {
+            childElem = child.element;
+          } else {
+            childElem = document.createTextNode(child.value);
+          }
+          self.element.appendChild(childElem);
+          return self;
+        }
+      );
+      
+      ctx.aliasMethod(ctx.Tag.Element, "<<", "append_child");
+      
+      ctx.defineMethod(ctx.Tag.Element, "clear_children",
+        function(ctx, self) {
+          while (self.element.hasChildNodes()) {
+            self.element.removeChild(self.element.firstChild);
+          }
+        }
+      );
+      
+      ctx.defineMethod(ctx.Tag.Element, "text",
+        function(ctx, self) {
+          var text = "";
+          var children = self.element.childNodes;
+          for (var i = 0; i < children.length; ++i) {
+            if (children[i].nodeType == Node.TEXT_NODE) {
+              text += children[i].nodeValue;
+            }
+          }
+          return text;
+        }
+      );
+      
+      ctx.defineMethod(ctx.Tag.Element, "text=",
+        function(ctx, self, args) {
+          while (self.element.hasChildNodes()) {
+            self.element.removeChild(self.element.firstChild);
+          }
+          self.element.appendChild(document.createTextNode(args[0].value));
+        }
+      );
+      
+      ctx.defineMethod(ctx.Tag.Element, "focus",
+        function(ctx, self, args) {
+          self.element.focus();
+        }
+      );
+      
+      ctx.defineMethod(ctx.Tag.Element, "on",
+        function(ctx, self, args, block) {
+          var eventName = args[0].value;
+          Event.observe(self.element, eventName, function(event) {
+            var subCtx = ctx.newContext();
+            var arg = subCtx.newObject(ctx.Tag.Event);
+            arg.value = event;
+            subCtx.callProc(block, [arg], null, function(res, ex) {
+              if (ex) console.error("Exception in event handler: ", ex);
+            });
+          }, true);
+        }
+      );
+      
+      ctx.defineMethod(ctx.Tag.Element, "method_missing",
+        function(ctx, self, args, block) {
+          var methodName = args[0].value;
+          if (methodName.match(/^(.*)=$/)) {
+            var name = RegExp.$1;
+            self.element[name] = args[1].value;
+          } else if (methodName.match(/^on_(.*)$/)) {
+            ctx.sendSync(self, "on", [ctx.toRuby(RegExp.$1)], block);
+          } else {
+            return self.element[methodName];
+          }
+        }
+      );
+      
+      ctx.defineMethod(ctx.Tag.Element, "inspect",
+        function(ctx, self) {
+          return "#<" + ctx.classOf(self).name + ">";
+        }
+      );
+      
+    }
+    
+    ctx.defineClass("Event", {upperClass: ctx.Tag});
+    {
+      
+      ctx.defineMethod(ctx.Tag.Event, "stop",
+        function(ctx, self, args) {
+          Event.stop(self.value);
+        }
+      );
+      
+    }
+    
+    var tagNames = [
+      "a", "abbr", "acronym", "address", "applet", "area", "b", "base", "basefont", "bdo", 
+      "bgsound", "big", "blink", "blockquote", "body", "br", "button", "caption", "center", "cite", 
+      "code", "col", "colgroup", "comment", "dd", "del", "dfn", "dir", "div", "dl", "dt", "em", 
+      "embed", "fieldset", "font", "form", "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", 
+      "head", "hr", "html", "i", "iframe", "ilayer", "img", "input", "ins", "isindex", "kbd", 
+      "keygen", "label", "layer", "legend", "li", "link", "listing", "map", "marquee", "menu", "meta", 
+      "multicol", "nextid", "nobr", "noembed", "noframes", "nolayer", "noscript", "object", "ol", 
+      "optgroup", "option", "p", "param", "plaintext", "pre", "q", "rb", "rp", "rt", "ruby", "s", 
+      "samp", "script", "select", "server", "small", "spacer", "span", "strike", "strong", "style", 
+      "sub", "sup", "table", "tbody", "td", "textarea", "tfoot", "th", "thead", "title", "tr", "tt", 
+      "u", "ul", "var", "wbr", "xmp"
+    ];
+    
+    tagNames.each(function(tagName) {
+      var className = tagName.replace(/^(.)(.*)$/, function(s, f, r) { return f.toUpperCase() + r; });
+      var klass = ctx.defineClass(className, {superClass: ctx.Tag.Element, upperClass: ctx.Tag});
+      ctx.defineMethod(klass, "initialize", {async: true},
+        function(ctx, self, args, block, callback) {
+          ctx.superAsync(self, "initialize", [ctx.toRuby(className)], block, klass, callback);
+        }
+      );
+    });
+    
+  }
+  
   ctx.setConstant(ctx.Object, "RUBY_PLATFORM", ctx.newString("javascript-hotruby"));
 
   ctx.vm().onClassesInitialized();

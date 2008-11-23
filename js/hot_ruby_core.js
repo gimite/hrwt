@@ -1349,6 +1349,18 @@ RubyContext.prototype = {
     return result;
   },
   
+  superAsync: function(receiver, methodName, args, block, klass, callback) {
+    var me = this;
+    me.invokeMethod_({
+      receiver: receiver,
+      methodName: methodName,
+      args: args,
+      block: block,
+      super: true,
+      klass: klass
+    }, callback);
+  },
+  
   /**
    * Returns class of the object.
    * @param obj
@@ -1382,7 +1394,7 @@ RubyContext.prototype = {
       }
       return obj.singletonClass;
     } else {
-      me.fatal("Cannot define singleton method for: " + obj.toString());
+      me.fatal("Cannot define singleton method for: " + obj);
     }
   },
   
@@ -1438,6 +1450,7 @@ RubyContext.prototype = {
   
   defineClassMethod: function(klass, name, options, func) {
     var me = this;
+    if (!me.kindOf(klass, me.Module)) me.fatal("[defineClassMethod] klass is not a class or module");
     me.defineSingletonMethod(klass, name, options, func);
   },
   
@@ -1474,7 +1487,8 @@ RubyContext.prototype = {
       var func = function() {
         var proc = arguments.callee.proc;
         var result;
-        me.runOpcode_({
+        var ctx = me.newContext(); // runs as new thread
+        ctx.runOpcode_({
           opcode: proc.opcode,
           invokeClass: proc.parentFrame.invokeClass,
           methodName: proc.parentFrame.methodName,
@@ -1739,7 +1753,11 @@ RubyContext.prototype = {
     var me = this;
     var ex = me.newObject(klass || me.Exception);
     me.setInstanceVar(ex, "@message", me.toRuby(message));
-    me.setInstanceVar(ex, "@backtrace", me.newArray());
+    if (!me.getInstanceVar(ex, "@context")) {
+      var mc = me.newObject(me.MethodContext);
+      mc.frame = me.currentFrame_.dynamicFrame;
+      me.setInstanceVar(ex, "@context", mc);
+    }
     callback(null, ex);
   },
   
