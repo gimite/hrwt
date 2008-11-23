@@ -26,7 +26,7 @@ port = opts["port"]
 
 server = WEBrick::HTTPServer.new(
   :Port => port,
-  :MimeTypes => WEBrick::HTTPUtils.load_mime_types("config/mime.types")
+  :MimeTypes => WEBrick::HTTPUtils.load_mime_types("etc/hrwt/mime.types")
 )
 server.mount("/js", WEBrick::HTTPServlet::FileHandler, "./js")
 server.mount("/images", WEBrick::HTTPServlet::FileHandler, "./app/images")
