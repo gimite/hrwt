@@ -1433,6 +1433,16 @@ RubyContext.prototype = {
     return new RubyClass(me, className, params);
   },
   
+  /**
+    * Registers a function which is called when instance of the class is created.
+    * ctx.newObject(klass, arg1, arg2, ...) calls func(ctx, obj, arg1, arg2, ...).
+    * Ruby Object#initialize calls func(ctx, obj).
+    * If the class defines its own initialize, constructor is not called automatically.
+    */
+  defineConstructor: function(klass, func) {
+    klass.constructor = func;
+  },
+  
   defineMethod: function(klass, name, options, func) {
     var me = this;
     if (!func) {
@@ -1581,7 +1591,15 @@ RubyContext.prototype = {
   
   newObject: function(klass) {
     var me = this;
-    return new RubyObject(me, klass);
+    var obj = new RubyObject(me, klass);
+    if (klass.constructor) {
+      var args = [me, obj];
+      for (var i = 1; i < arguments.length; ++i) {
+        args.push(arguments[i]);
+      }
+      klass.constructor.apply(null, args);
+    }
+    return obj;
   },
   
   /**

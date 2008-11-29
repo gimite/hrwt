@@ -2,12 +2,14 @@
 
 RubyVM.addInitializer(function(ctx) {
 
-  var Object = ctx.defineClass("Object");
-  ctx.setConstant(Object, "Object", Object);
+  var objectClass = ctx.defineClass("Object");
+  ctx.setConstant(objectClass, "Object", objectClass);
   {
     
     ctx.defineMethod(ctx.Object, "initialize",
       function(ctx, self) {
+        var ctor = ctx.classOf(self).constructor;
+        if (ctor) ctor(ctx, self);
       }
     );
     
@@ -267,7 +269,7 @@ RubyVM.addInitializer(function(ctx) {
     
     ctx.defineMethod(ctx.Class, "allocate",
       function(ctx, self) {
-        return ctx.newObject(self);
+        return new RubyObject(ctx, self);
       }
     );
     
@@ -1207,45 +1209,74 @@ RubyVM.addInitializer(function(ctx) {
   }
 
   // HotRuby-specific class
-  ctx.defineModule("Tag");
+  ctx.defineModule("HRWT");
   {
     
-    ctx.defineClassMethod(ctx.Tag, "body",
+    ctx.HRWT.structureToObject = function(ctx, structure) {
+      if (!structure) return null;
+      if (structure.$rubyObject) return structure.$rubyObject;
+      if (structure.$id) {
+        var elem = ctx.newObject(ctx.HRWT.Element, $(structure.$id), structure);
+      } else {
+        var elem = ctx.newObject(ctx.HRWT.RepeatableElement, structure);
+      }
+      structure.$rubyObject = elem;
+      return elem;
+    };
+    
+    ctx.defineClassMethod(ctx.HRWT, "view",
       function(ctx, self, args) {
-        var elem = ctx.newObject(ctx.Tag.Element);
-        elem.element = document.body;
-        return elem;
+        if (!self.view) {
+          self.view = ctx.newObject(ctx.HRWT.Element, document.body, window.hrwt_view_structure);
+        }
+        return self.view;
       }
     );
     
-    ctx.defineClassMethod(ctx.Tag, "title",
+    ctx.defineClassMethod(ctx.HRWT, "title",
       function(ctx, self, args) {
         return document.title;
       }
     );
     
-    ctx.defineClassMethod(ctx.Tag, "title=",
+    ctx.defineClassMethod(ctx.HRWT, "title=",
       function(ctx, self, args) {
         var title = args[0].value;
         document.title = title;
       }
     );
     
-    ctx.defineClass("Element", {upperClass: ctx.Tag});
+    ctx.defineClass("Element", {upperClass: ctx.HRWT});
     {
       
-      ctx.defineMethod(ctx.Tag.Element, "initialize",
+      ctx.defineConstructor(ctx.HRWT.Element, function(ctx, self, element, structure) {
+        self.element = element;
+        self.structure = structure;
+        if (structure) {
+          Object.keys(structure).each(function(name) {
+            if (!name.match(/^\$/)) {
+              ctx.defineSingletonMethod(self, name, {async: true},
+                function(sctx, sself, sargs, sblock, scallback) {
+                  sctx.sendAsync(sself, "get", [sctx.toRuby(name)], sblock, scallback);
+                }
+              );
+            }
+          });
+        }
+      });
+      
+      ctx.defineMethod(ctx.HRWT.Element, "initialize",
         function(ctx, self, args) {
           var tagName = args[0].value;
           self.element = document.createElement(tagName);
         }
       );
       
-      ctx.defineMethod(ctx.Tag.Element, "append_child",
+      ctx.defineMethod(ctx.HRWT.Element, "append_child",
         function(ctx, self, args) {
           var child = args[0];
           var childElem;
-          if (ctx.kindOf(child, ctx.Tag.Element)) {
+          if (ctx.kindOf(child, ctx.HRWT.Element)) {
             childElem = child.element;
           } else {
             childElem = document.createTextNode(child.value);
@@ -1255,9 +1286,9 @@ RubyVM.addInitializer(function(ctx) {
         }
       );
       
-      ctx.aliasMethod(ctx.Tag.Element, "<<", "append_child");
+      ctx.aliasMethod(ctx.HRWT.Element, "<<", "append_child");
       
-      ctx.defineMethod(ctx.Tag.Element, "clear_children",
+      ctx.defineMethod(ctx.HRWT.Element, "clear_children",
         function(ctx, self) {
           while (self.element.hasChildNodes()) {
             self.element.removeChild(self.element.firstChild);
@@ -1265,7 +1296,7 @@ RubyVM.addInitializer(function(ctx) {
         }
       );
       
-      ctx.defineMethod(ctx.Tag.Element, "text",
+      ctx.defineMethod(ctx.HRWT.Element, "text",
         function(ctx, self) {
           var text = "";
           var children = self.element.childNodes;
@@ -1278,7 +1309,7 @@ RubyVM.addInitializer(function(ctx) {
         }
       );
       
-      ctx.defineMethod(ctx.Tag.Element, "text=",
+      ctx.defineMethod(ctx.HRWT.Element, "text=",
         function(ctx, self, args) {
           while (self.element.hasChildNodes()) {
             self.element.removeChild(self.element.firstChild);
@@ -1287,18 +1318,18 @@ RubyVM.addInitializer(function(ctx) {
         }
       );
       
-      ctx.defineMethod(ctx.Tag.Element, "focus",
+      ctx.defineMethod(ctx.HRWT.Element, "focus",
         function(ctx, self, args) {
           self.element.focus();
         }
       );
       
-      ctx.defineMethod(ctx.Tag.Element, "on",
+      ctx.defineMethod(ctx.HRWT.Element, "on",
         function(ctx, self, args, block) {
           var eventName = args[0].value;
           Event.observe(self.element, eventName, function(event) {
             var subCtx = ctx.newContext();
-            var arg = subCtx.newObject(ctx.Tag.Event);
+            var arg = subCtx.newObject(ctx.HRWT.Event);
             arg.value = event;
             subCtx.callProc(block, [arg], null, function(res, ex) {
               if (ex) console.error("Exception in event handler: ", ex);
@@ -1307,7 +1338,14 @@ RubyVM.addInitializer(function(ctx) {
         }
       );
       
-      ctx.defineMethod(ctx.Tag.Element, "method_missing",
+      ctx.defineMethod(ctx.HRWT.Element, "get",
+        function(ctx, self, args) {
+          var name = args[0].value;
+          return ctx.HRWT.structureToObject(ctx, self.structure[name]);
+        }
+      );
+      
+      ctx.defineMethod(ctx.HRWT.Element, "method_missing",
         function(ctx, self, args, block) {
           var methodName = args[0].value;
           if (methodName.match(/^(.*)=$/)) {
@@ -1321,7 +1359,7 @@ RubyVM.addInitializer(function(ctx) {
         }
       );
       
-      ctx.defineMethod(ctx.Tag.Element, "inspect",
+      ctx.defineMethod(ctx.HRWT.Element, "inspect",
         function(ctx, self) {
           return "#<" + ctx.classOf(self).name + ">";
         }
@@ -1329,10 +1367,10 @@ RubyVM.addInitializer(function(ctx) {
       
     }
     
-    ctx.defineClass("Event", {upperClass: ctx.Tag});
+    ctx.defineClass("Event", {upperClass: ctx.HRWT});
     {
       
-      ctx.defineMethod(ctx.Tag.Event, "stop",
+      ctx.defineMethod(ctx.HRWT.Event, "stop",
         function(ctx, self, args) {
           Event.stop(self.value);
         }
@@ -1356,13 +1394,41 @@ RubyVM.addInitializer(function(ctx) {
     
     tagNames.each(function(tagName) {
       var className = tagName.replace(/^(.)(.*)$/, function(s, f, r) { return f.toUpperCase() + r; });
-      var klass = ctx.defineClass(className, {superClass: ctx.Tag.Element, upperClass: ctx.Tag});
+      var klass = ctx.defineClass(className, {superClass: ctx.HRWT.Element, upperClass: ctx.HRWT});
       ctx.defineMethod(klass, "initialize", {async: true},
         function(ctx, self, args, block, callback) {
           ctx.superAsync(self, "initialize", [ctx.toRuby(className)], block, klass, callback);
         }
       );
     });
+    
+    ctx.defineClass("RepeatableElement", {upperClass: ctx.HRWT});
+    {
+      
+      ctx.defineConstructor(ctx.HRWT.RepeatableElement, function(ctx, self, structure) {
+        self.structure = structure;
+      });
+      
+      ctx.defineMethod(ctx.HRWT.RepeatableElement, "[]",
+        function(ctx, self, args) {
+          var index = args[0];
+          return ctx.HRWT.structureToObject(ctx, self.structure[index]);
+        }
+      );
+      
+      ctx.defineMethod(ctx.HRWT.RepeatableElement, "size",
+        function(ctx, self) {
+          return self.structure.repeat;
+        }
+      );
+      
+      ctx.defineMethod(ctx.HRWT.RepeatableElement, "template",
+        function(ctx, self) {
+          return ctx.HRWT.structureToObject(ctx, self.structure.template);
+        }
+      );
+      
+    }
     
   }
   
