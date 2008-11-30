@@ -1,7 +1,7 @@
 require "hrwt/rpc_client"
 
 
-HRWT.title = "HotRuby+RPC Chat (using HRWT library)"
+HRWT.title = "HotRuby+RPC Chat (rendering whole document with Ruby, no HTML)"
 
 @log_div = HRWT::Div.new()
 @log_div.text = "Loading..."

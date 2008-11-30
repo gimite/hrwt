@@ -1224,6 +1224,34 @@ RubyVM.addInitializer(function(ctx) {
       return elem;
     };
     
+    ctx.HRWT.createElementMap = function(ctx, structure, result) {
+      result = result || {};
+      for (var k in structure) {
+        if (k == "$id") {
+          result[structure.$id] = $(structure.$id);
+        } else if (!k.match(/^\$/)) {
+          ctx.HRWT.createElementMap(ctx, structure[k], result);
+        }
+      }
+      return result;
+    };
+    
+    ctx.HRWT.cloneStructure = function(ctx, src, idMap) {
+      var dest = {};
+      for (var k in src) {
+        if (k == "$id") {
+          dest[k] = idMap[src[k]];
+        } else if (k == "$rubyObject") {
+          // Doesn't copy it
+        } else if (k.match(/^\$/)) {
+          dest[k] = src[k];
+        } else {
+          dest[k] = ctx.HRWT.cloneStructure(ctx, src[k], idMap);
+        }
+      }
+      return dest;
+    };
+    
     ctx.defineClassMethod(ctx.HRWT, "view",
       function(ctx, self, args) {
         if (!self.view) {
@@ -1419,6 +1447,48 @@ RubyVM.addInitializer(function(ctx) {
       ctx.defineMethod(ctx.HRWT.RepeatableElement, "size",
         function(ctx, self) {
           return self.structure.repeat;
+        }
+      );
+      
+      ctx.defineMethod(ctx.HRWT.RepeatableElement, "clear",
+        function(ctx, self) {
+          for (var i = 0; i < self.structure.repeat; ++i) {
+            var elem = $(self.structure[i].$id);
+            elem.parentNode.removeChild(elem);
+            self.structure[i] = null;
+          }
+          self.structure.repeat = 0;
+        }
+      );
+      
+      ctx.defineMethod(ctx.HRWT.RepeatableElement, "add",
+        function(ctx, self) {
+          var repeat = self.structure.repeat;
+          var elemMap = ctx.HRWT.createElementMap(ctx, self.structure.template);
+          var tplRoot = $(self.structure.template.$id);
+          var newRoot = tplRoot.cloneNode(true);
+          var lastRoot = $(self.structure[repeat > 0 ? repeat - 1 : "template"].$id);
+          if (lastRoot.nextSibling) {
+            lastRoot.parentNode.insertBefore(newRoot, lastRoot.nextSibling);
+          } else {
+            lastRoot.parentNode.appendChild(newRoot);
+          }
+          var idMap = {};
+          for (var id in elemMap) {
+            var tplElem = elemMap[id];
+            tplElem.id = "";
+            var newElem = $(id);
+            tplElem.id = id;
+            var newId = id.replace(/\.[^\.]+$/, "." + window.hrwt_view_structure.$nextSerial);
+            ++window.hrwt_view_structure.$nextSerial;
+            newElem.id = newId;
+            idMap[id] = newId;
+          }
+          Element.show(newRoot);
+          var newStructure = ctx.HRWT.cloneStructure(ctx, self.structure.template, idMap);
+          self.structure[repeat] = newStructure;
+          ++self.structure.repeat;
+          return ctx.HRWT.structureToObject(ctx, newStructure);
         }
       );
       

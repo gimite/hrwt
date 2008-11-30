@@ -26,6 +26,13 @@ module HRWT
           escaped = text.gsub(/&/, "&amp;").gsub(/</, "&lt;").gsub(/>/, "&gt;")
           return Hpricot::Text.new(escaped)
         end
+        
+        def new_id(base_name)
+          return nil if !base_name
+          id = "#{base_name}.#{@next_serial}"
+          @next_serial += 1
+          return id
+        end
 
         def convert_elems(elems, context)
           return elems.map(){ |c| convert(c, context) }.flatten()
@@ -40,36 +47,38 @@ module HRWT
             when Hpricot::Elem
               attr = src.attributes
               local_id = attr["id"]
-              if local_id && context["scope"]
-                id = context["scope"] + "." + local_id
+              if local_id
+                base_name = (context["scope"] ? context["scope"] + "." : "") + local_id
               else
-                id = local_id
+                base_name = nil
               end
               if attr["repeat"]
+                raise("element with repeat must have id") if !base_name
                 repeat = attr["repeat"].to_i()
                 context["structure"][local_id] = structure = {"repeat" => repeat}
                 elems = []
-                structure["template"] = {"\$id" => "#{id}.template"}
+                id = "#{base_name}.template"
+                structure["template"] = {"\$id" => id}
                 elems << new_elem_with_converted_children(
                   src.name,
                   attr.merge({
-                    "repeat" => nil, "id" => "#{id}.template",
+                    "repeat" => nil, "id" => id,
                     "style" => "display: none;"
                   }),
                   src.children,
-                  context.merge({"scope" => id, "structure" => structure["template"]}))
+                  context.merge({"scope" => base_name, "structure" => structure["template"]}))
                 repeat.times() do |i|
-                  serial = @next_serial
-                  @next_serial += 1
-                  structure[i.to_s()] = {"\$id" => "#{id}.#{serial}"}
+                  id = new_id(base_name)
+                  structure[i.to_s()] = {"\$id" => id}
                   elems << new_elem_with_converted_children(
                     src.name,
-                    attr.merge({"repeat" => nil, "id" => "#{id}.#{serial}"}),
+                    attr.merge({"repeat" => nil, "id" => id}),
                     src.children,
-                    context.merge({"scope" => "#{id}.#{serial}", "structure" => structure[i.to_s()]}))
+                    context.merge({"scope" => base_name, "structure" => structure[i.to_s()]}))
                 end
                 return elems
               else
+                id = new_id(base_name)
                 context["structure"][local_id] = {"\$id" => id} if local_id
                 return new_elem_with_converted_children(
                   src.name, attr.merge({"id" => id}), src.children, context)
@@ -94,7 +103,7 @@ module HRWT
               raise("unexpected top-level tag")
             end
           end
-          structure['$next_serial'] = @next_serial
+          structure['$nextSerial'] = @next_serial
           script = "window.hrwt_iseq_url = 'iseq/%s';\n" % action
           script << "window.hrwt_view_structure = %s;\n" % structure.to_json()
           script_elem = out.search('#generated_script')[0]
