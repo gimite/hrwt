@@ -3,30 +3,32 @@
   <title>HotRuby Console</title>
   <script type="text/javascript" src="js/prototype-1.6.0.2.js"></script>
   <script type="text/javascript" src="js/hot_ruby_core.js"></script>
-  <script type="text/javascript" src="js/hot_ruby_util.js"></script>
   <script type="text/javascript" src="js/hot_ruby_classes.js"></script>
+  <script type="text/javascript" src="js/hrwt.js"></script>
   
   <script type="text/javascript">
+    
+    var vm;
     
     function run(debug) {
       Element.show("loading");
       var src = document.getElementById("srcArea").value;
-      Ruby.vm.debug = debug;
-      Ruby.vm.compileAndRun({src: src}, function() {
+      vm.debug = debug;
+      vm.compileAndRun({script: src}, function() {
         Element.hide("loading");
       });
     }
     
     function runFile(file, debug) {
       Element.show("loading");
-      Ruby.vm.debug = debug;
-      Ruby.vm.compileAndRun({url: "iseq/" + file}, function() {
+      vm.debug = debug;
+      vm.compileAndRun({url: "iseq/" + file}, function() {
         Element.hide("loading");
       });
     }
     
     function init() {
-      Ruby.vm.debugDom = document.getElementById("debug");
+      vm = new RubyVM({consoleElement: $("debug")});
       Element.hide("loading");
     }
     

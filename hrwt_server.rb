@@ -9,6 +9,7 @@ $LOAD_PATH << "./lib"
 require "optparse"
 require "webrick"
 require "hrwt"
+require "hrwt/html_generator"
 
 
 def compile(src, req, res)
@@ -26,7 +27,7 @@ port = opts["port"]
 
 server = WEBrick::HTTPServer.new(
   :Port => port,
-  :MimeTypes => WEBrick::HTTPUtils.load_mime_types("config/mime.types")
+  :MimeTypes => WEBrick::HTTPUtils.load_mime_types("etc/hrwt/mime.types")
 )
 server.mount("/js", WEBrick::HTTPServlet::FileHandler, "./js")
 server.mount("/images", WEBrick::HTTPServlet::FileHandler, "./app/images")
@@ -44,11 +45,27 @@ Dir["app/client/*.rb"].each() do |path|
   server.mount_proc("/iseq/#{file_name}") do |req, res|
     compile(File.read(path), req, res)
   end
+  if !File.exist?("app/client/#{file_name}.html") && !File.exist?("app/client/#{file_name}.xhtml")
+    server.mount_proc("/#{file_name}") do |req, res|
+      res["Content-Type"] = "text/html"
+      template = File.read("etc/hrwt/client.rhtml")
+      res.body = ERB.new(template, nil, "<>").result(binding)
+    end
+  end
 end
 
 Dir["app/client/*.html"].each() do |path|
   file_name = base_prefix(path)
   server.mount("/#{file_name}", WEBrick::HTTPServlet::FileHandler, path)
+end
+
+Dir["app/client/*.xhtml"].each() do |path|
+  file_name = base_prefix(path)
+  generator = HRWT::HTMLGenerator.new()
+  server.mount_proc("/#{file_name}") do |req, res|
+    res["Content-Type"] = "text/html"
+    res.body = generator.generate(path, file_name)
+  end
 end
 
 server.mount_proc("/iseq/builtin") do |req, res|

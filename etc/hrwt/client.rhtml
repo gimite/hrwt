@@ -1,0 +1,17 @@
+<html>
+<head>
+  <script type="text/javascript" src="js/prototype-1.6.0.2.js"></script>
+  <script type="text/javascript" src="js/hot_ruby_core.js"></script>
+  <script type="text/javascript" src="js/hot_ruby_util.js"></script>
+  <script type="text/javascript" src="js/hot_ruby_classes.js"></script>
+  
+  <script type="text/javascript">
+    
+    function init() {
+      var vm = new RubyVM();
+      vm.compileAndRun({url: "iseq/<%= file_name %>"});
+    }
+    
+  </script>
+</head><body onload="init();">
+</body></html>

@@ -1,6 +1,4 @@
-require "hrwt/js"
-
-if JS
+if RUBY_PLATFORM == "javascript-hotruby"
   old_debug = JS.debug
   JS.debug = false
 end
@@ -82,4 +80,4 @@ module RPCHelper
 end
 
 
-JS.debug = old_debug if JS
+JS.debug = old_debug if RUBY_PLATFORM == "javascript-hotruby"

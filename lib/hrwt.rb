@@ -13,7 +13,7 @@ module HRWT
     }
 
     REQUIRED_PATHS = [
-      "lib/hrwt/bootstrap.rb",
+      "lib/core/bootstrap.rb",
       "(bootstrap_dynamic)",
       "lib/core/exception.rb",
       "lib/core/kernel.rb",
@@ -28,7 +28,7 @@ module HRWT
       "lib/core/array.rb",
       "lib/core/hash.rb",
       "lib/core/regexp.rb",
-      "lib/hrwt/builtin.rb",
+      "lib/core/after_all.rb",
       "lib/hrwt/rpc_base.rb",
       "lib/hrwt/rpc_client.rb",
     ]
