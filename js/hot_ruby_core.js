@@ -211,13 +211,13 @@ RubyVM.prototype = {
     var me = this;
     var ctx = new me.Context();
     me.topObject_ = ctx.newObject(ctx.Object);
-    var native = ctx.newObject(ctx.NativeEnvironment);
-    ctx.setGlobalVar("$native", native);
+    var nativeEnv = ctx.newObject(ctx.NativeEnvironment);
+    ctx.setGlobalVar("$native", nativeEnv);
     if (me.env_ == "flash") {
       // Create _root NativeObject
       var obj = ctx.newObject(ctx.NativeObject);
       obj.value = _root;
-      ctx.setInstanceVar(native, "_root", obj);
+      ctx.setInstanceVar(nativeEnv, "_root", obj);
     }
   },
   
